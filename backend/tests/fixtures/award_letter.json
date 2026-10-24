@@ -1,0 +1,11 @@
+{
+  "id": "award-1",
+  "filename": "award_letter.pdf",
+  "document_type": "award_letter",
+  "amount": "12000",
+  "currency": "USD",
+  "term": "Fall 2026",
+  "deadline": "2026-07-15",
+  "required_credits": 12,
+  "extracted_text": "Synthetic test fixture"
+}

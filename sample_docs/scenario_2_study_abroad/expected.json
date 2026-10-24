@@ -1,0 +1,27 @@
+{
+  "synthetic": true,
+  "scenario": "Study-abroad program quote and scholarship letter with different deadline and enrollment requirement",
+  "documents": {
+    "award_letter.pdf": {
+      "document_type": "award_letter",
+      "amount": 12000,
+      "currency": "USD",
+      "term": "Fall 2026",
+      "deadline": "2026-07-15",
+      "required_credits": 12
+    },
+    "study_abroad_quote.pdf": {
+      "document_type": "study_abroad_quote",
+      "amount": 8500,
+      "currency": "USD",
+      "term": "Fall 2026",
+      "deadline": "2026-09-01",
+      "required_credits": 6
+    }
+  },
+  "expected_rule_ids": [
+    "deadline.different_dates",
+    "credits.requirements_disagree"
+  ],
+  "note": "The current amount comparison only compares award letters with tuition bills; it does not infer whether a scholarship pays for study-abroad costs."
+}

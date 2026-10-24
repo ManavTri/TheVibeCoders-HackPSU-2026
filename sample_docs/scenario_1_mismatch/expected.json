@@ -1,0 +1,28 @@
+{
+  "synthetic": true,
+  "scenario": "Award letter and tuition bill with deliberately mismatched terms and credit requirements",
+  "documents": {
+    "award_letter.pdf": {
+      "document_type": "award_letter",
+      "amount": 12000,
+      "currency": "USD",
+      "term": "Fall 2026",
+      "deadline": "2026-07-15",
+      "required_credits": 12
+    },
+    "tuition_bill.pdf": {
+      "document_type": "tuition_bill",
+      "amount": 18000,
+      "currency": "USD",
+      "term": "Spring 2026",
+      "deadline": "2026-08-01",
+      "required_credits": 6
+    }
+  },
+  "expected_rule_ids": [
+    "deadline.different_dates",
+    "term.documents_disagree",
+    "credits.requirements_disagree"
+  ],
+  "note": "The award is less than the bill, so amount.award_exceeds_bill should not appear."
+}
