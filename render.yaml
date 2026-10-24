@@ -2,6 +2,7 @@ services:
   - type: web
     name: clearledger-api
     runtime: python
+    plan: free
     rootDir: backend
     buildCommand: pip install .
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
@@ -16,6 +17,8 @@ services:
         value: /api
       - key: MAX_UPLOAD_MB
         value: "10"
+      - key: SUPABASE_JWT_AUDIENCE
+        value: authenticated
       - key: SUPABASE_STORAGE_BUCKET
         value: student-documents
       - key: CORS_ORIGINS
@@ -23,8 +26,6 @@ services:
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_KEY
-        sync: false
-      - key: SUPABASE_JWT_SECRET
         sync: false
       - key: LLM_API_KEY
         sync: false

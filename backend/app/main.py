@@ -20,7 +20,6 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
                 ("REQUIRE_AUTH=true", settings.require_auth),
                 ("SUPABASE_URL", settings.supabase_url),
                 ("SUPABASE_SERVICE_KEY", settings.supabase_service_key),
-                ("SUPABASE_JWT_SECRET", settings.supabase_jwt_secret),
             )
             if not value
         ]
