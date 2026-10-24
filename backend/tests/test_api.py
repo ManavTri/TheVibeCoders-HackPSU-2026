@@ -2,10 +2,11 @@ from pathlib import Path
 from uuid import uuid4
 
 import jwt
+from fastapi.testclient import TestClient
+
 from app.core.auth import current_user
 from app.core.config import Settings
 from app.main import app
-from fastapi.testclient import TestClient
 
 SAMPLES = Path(__file__).resolve().parents[2] / "sample_docs" / "scenario_1_mismatch"
 
