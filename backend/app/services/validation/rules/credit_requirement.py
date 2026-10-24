@@ -12,10 +12,18 @@ def check_credit_requirements(documents: list[FinancialDocument]) -> list[Findin
     return [
         Finding(
             rule_id="credits.requirements_disagree",
-            severity=Severity.MEDIUM,
+            severity=Severity.WARNING,
             title="Credit requirements differ",
-            message="Documents list different credit-hour requirements. Ask the award provider which enrollment level controls your eligibility.",
+            explanation="Documents list different credit-hour requirements. Ask the award provider which enrollment level controls your eligibility.",
             document_ids=[doc.id for doc in requirements],
-            details={"requirements": ", ".join(str(value) for value in sorted(distinct) if value is not None)},
+            fields={"requirements": ", ".join(str(value) for value in sorted(distinct) if value is not None)},
+            suggested_action="Ask the award provider which enrollment level controls your eligibility.",
         )
     ]
+
+
+class CreditRequirementRule:
+    id = "credits.requirements_disagree"
+
+    def check(self, docs: list[FinancialDocument]) -> list[Finding]:
+        return check_credit_requirements(docs)

@@ -10,7 +10,8 @@ export function FindingCard({ finding, index }: { finding: Finding; index: numbe
           <code>{finding.rule_id}</code>
         </div>
         <h3>{finding.title}</h3>
-        <p>{finding.message}</p>
+        <p>{finding.explanation}</p>
+        <p className="finding-action"><b>Suggested next step:</b> {finding.suggested_action}</p>
       </div>
       <span className="finding-arrow" aria-hidden="true">↗</span>
     </article>

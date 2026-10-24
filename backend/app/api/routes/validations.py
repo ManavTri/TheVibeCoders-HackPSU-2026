@@ -1,56 +1,54 @@
-from datetime import UTC, datetime
-from uuid import uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
 
-from app.db.repositories import get_report, list_reports, save_report
-from app.schemas.documents import DocumentSummary, FinancialDocument
-from app.schemas.validation import ValidationReport
+from app.api.deps import CurrentUser, current_user_id
+from app.db.repositories import (
+    create_validation_run,
+    get_document,
+    get_validation_run,
+    list_documents,
+)
+from app.schemas.documents import DocumentStatus, FinancialDocument
+from app.schemas.validation import ValidationReport, ValidationRequest
 from app.services.validation.engine import validate_documents
 
 router = APIRouter(prefix="/validations", tags=["validations"])
 
 
 @router.post("", response_model=ValidationReport, status_code=status.HTTP_201_CREATED)
-def create_validation(documents: list[FinancialDocument]) -> ValidationReport:
-    if len(documents) < 2:
-        raise HTTPException(status_code=400, detail="Upload at least two documents to cross-check.")
+def create_validation(
+    user: CurrentUser,
+    request: ValidationRequest | None = None,
+) -> ValidationReport:
+    request = request or ValidationRequest()
+    user_id = current_user_id(user)
+    if request.document_ids is None:
+        records = list_documents(user_id)
+    else:
+        document_ids = [str(document_id) for document_id in request.document_ids]
+        if len(set(document_ids)) != len(document_ids):
+            raise HTTPException(status_code=400, detail="Document IDs must be unique.")
+        records = []
+        for document_id in document_ids:
+            record = get_document(user_id, document_id)
+            if record is None:
+                raise HTTPException(status_code=404, detail="One or more documents were not found.")
+            records.append(record)
+    records = [record for record in records if record["status"] == DocumentStatus.EXTRACTED.value]
+    if len(records) < 2:
+        raise HTTPException(
+            status_code=400,
+            detail="At least two successfully extracted documents are required to validate.",
+        )
+    documents = [FinancialDocument.model_validate(record) for record in records]
     findings = validate_documents(documents)
-    report = ValidationReport(
-        id=str(uuid4()),
-        created_at=datetime.now(UTC),
-        documents=[
-            DocumentSummary(
-                id=doc.id,
-                filename=doc.filename,
-                document_type=doc.document_type,
-                amount=doc.amount,
-                currency=doc.currency,
-                term=doc.term,
-                deadline=doc.deadline,
-                required_credits=doc.required_credits,
-            )
-            for doc in documents
-        ],
-        findings=findings,
-        summary=(
-            f"{len(findings)} potential {'inconsistency' if len(findings) == 1 else 'inconsistencies'} found."
-            if findings
-            else "No potential inconsistencies detected."
-        ),
-    )
-    save_report(report)
-    return report
+    return create_validation_run(user_id, documents, findings)
 
 
-@router.get("", response_model=list[ValidationReport])
-def get_validations() -> list[ValidationReport]:
-    return list_reports()
-
-
-@router.get("/{report_id}", response_model=ValidationReport)
-def get_validation(report_id: str) -> ValidationReport:
-    report = get_report(report_id)
+@router.get("/{run_id}", response_model=ValidationReport)
+def get_validation(run_id: UUID, user: CurrentUser) -> ValidationReport:
+    report = get_validation_run(current_user_id(user), str(run_id))
     if report is None:
         raise HTTPException(status_code=404, detail="Validation report not found.")
     return report

@@ -9,6 +9,9 @@ export function useReport(id: string) {
 
   useEffect(() => {
     let active = true
+    setReport(null)
+    setInsights(null)
+    setError('')
     Promise.all([getReport(id), getInsights(id)])
       .then(([reportResult, insightsResult]) => {
         if (!active) return

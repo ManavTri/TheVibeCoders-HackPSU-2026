@@ -15,11 +15,19 @@ def check_amounts(documents: list[FinancialDocument]) -> list[Finding]:
                 findings.append(
                     Finding(
                         rule_id="amount.award_exceeds_bill",
-                        severity=Severity.MEDIUM,
+                        severity=Severity.WARNING,
                         title="Award exceeds tuition bill",
-                        message="The listed award is larger than the tuition bill. Confirm whether the award covers other costs or is paid as a refund.",
+                        explanation="The listed award is larger than the tuition bill. Confirm whether the award covers other costs or is paid as a refund.",
                         document_ids=[award.id, bill.id],
-                        details={"award_amount": award.amount, "bill_amount": bill.amount},
+                        fields={"award_amount": str(award.amount), "bill_amount": str(bill.amount)},
+                        suggested_action="Ask the financial-aid office how any remaining award balance is disbursed.",
                     )
                 )
     return findings
+
+
+class AmountMismatchRule:
+    id = "amount.award_exceeds_bill"
+
+    def check(self, docs: list[FinancialDocument]) -> list[Finding]:
+        return check_amounts(docs)

@@ -1,12 +1,12 @@
 # Validation rules
 
-Rules only compare fields that the parser can read explicitly. Missing or ambiguous values are omitted, not guessed. A finding is a prompt for the student to verify source documents, not a conclusion that a financial error occurred.
+Each rule is a small independent object implementing `Rule.check(docs) -> list[Finding]`. The engine registers rule instances and concatenates their findings. Rules compare only fields the parser can read explicitly; missing and ambiguous values are omitted rather than guessed.
 
 | Rule ID | What it checks | Why it matters | Severity |
 |---|---|---|---|
-| `amount.award_exceeds_bill` | Same-currency award-letter amount is greater than tuition-bill amount | An apparent overage may mean the award covers other costs or that the student should ask about a refund/disbursement | Medium |
-| `deadline.different_dates` | Any two extracted payment/response dates differ | Helps students spot multiple dates and confirm which action each date controls; differing dates are not necessarily contradictory | Low |
-| `term.documents_disagree` | Two or more documents state different academic terms | An award may be term-specific, so the student should confirm applicability | High |
-| `credits.requirements_disagree` | Two or more documents state different credit-hour requirements | Enrollment level may affect award eligibility | Medium |
+| `amount.award_exceeds_bill` | Same-currency award-letter amount exceeds the tuition-bill amount | An apparent overage may mean the award also covers other costs or that the student should ask about refund/disbursement | `warning` |
+| `deadline.different_dates` | Two documents contain different explicit due or response dates | Prompts the student to verify what action each date applies to; different dates are not necessarily contradictory | `info` |
+| `term.documents_disagree` | At least two documents state different academic terms | Award eligibility may depend on the term, so applicability should be confirmed | `error` |
+| `credits.requirements_disagree` | At least two documents state different minimum credit requirements | Enrollment level may affect award eligibility | `warning` |
 
-Severity indicates the order in which a student may want to review a prompt; it is not an estimate of financial harm. The current parser handles common explicit labels and dates. It can miss values, and it does not perform OCR, currency conversion, eligibility determination, or financial advice.
+Severity is a review priority, not an estimate of financial harm. A finding explains what was compared and suggests a question to ask; it is not a conclusion that a financial error occurred or financial advice. The parser handles common labeled values/dates, does not perform OCR or currency conversion, and can miss or misread details. Students should compare findings with the original documents and confirm them with the issuer.

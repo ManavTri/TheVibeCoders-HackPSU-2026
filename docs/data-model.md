@@ -1,23 +1,39 @@
 # Data model
 
-## FinancialDocument
+The Supabase Postgres schema is created by [`backend/supabase/migrations/20261024000000_initial_schema.sql`](../backend/supabase/migrations/20261024000000_initial_schema.sql). RLS is enabled on each public table.
+
+| Table | Columns and purpose |
+|---|---|
+| `profiles` | `id` (UUID references `auth.users.id`), `name`, `university`, and `created_at`. An Auth trigger creates a profile when a new user signs up. |
+| `documents` | `id`, `user_id`, `type`, `filename`, `storage_path`, `status` (`uploaded` / `extracted` / `failed`), `extracted_json` (`jsonb`), and `created_at`. The JSON object stores changing extracted fields and optional extraction failure details without requiring a schema migration for every extraction tweak. |
+| `validation_runs` | `id`, `user_id`, `created_at`, and `document_ids` (UUID array). Each run stores the documents it compared. |
+| `findings` | `id`, `run_id`, `rule_id`, `severity` (`error` / `warning` / `info`), `title`, `explanation`, `document_ids`, `fields` (`jsonb`), `suggested_action`, and `created_at`. |
+
+## Private document objects
+
+PDF bytes live in the private Supabase Storage bucket `student-documents`, not in Postgres. Object paths use `{user_id}/{document_id}.pdf`. Database rows store the path; API document responses intentionally omit both `storage_path` and `user_id`. The authenticated user can delete the document through the backend, which removes the object and row.
+
+## Extracted document contract
+
+`FinancialDocument` mirrors the JSON payload used in `documents.extracted_json`:
 
 | Field | Type | Meaning |
 |---|---|---|
-| `id` | string | Upload-batch document identifier |
-| `filename` | string | Original client filename |
-| `document_type` | enum | `award_letter`, `tuition_bill`, or `study_abroad_quote` |
-| `amount` | decimal, optional | Explicitly extracted USD amount |
-| `currency` | string | Currently defaults to USD |
-| `term` | string, optional | Academic term such as `Fall 2026` |
-| `deadline` | date, optional | Explicit deadline/payment date |
-| `required_credits` | integer, optional | Explicit credit-hour requirement |
-| `extracted_text` | string | Extracted selectable PDF text; do not persist in production without consent/retention controls |
+| `id` | UUID string | Document row ID |
+| `filename` | string | Original uploaded filename |
+| `document_type` | enum | `award_letter`, `tuition_bill`, `study_abroad_quote` |
+| `amount` | decimal or null | Explicit amount read from the document |
+| `currency` | ISO-4217 string | Defaults to `USD` when not extracted |
+| `term` | string or null | Explicit academic term |
+| `deadline` | date or null | Explicit due or response date |
+| `required_credits` | integer or null | Explicit minimum credit requirement |
 
-## ValidationReport
+Extracted PDF text is processed transiently and is not stored in `extracted_json` or returned by the API.
 
-A report has an opaque ID, UTC creation timestamp, document summaries, findings, and a human-readable summary. Each finding includes a stable `rule_id`, severity, explanation, relevant document IDs, and comparison details. The prototype's repository is process-local memory; IDs are not durable across restarts.
+## Validation and insights
 
-## Insights
+A `ValidationReport` is a read model assembled from a `validation_runs` row, owned documents, and related `findings`. Every `Finding` has `rule_id`, severity, title, explanation, document IDs, compared `fields`, and a `suggested_action`. An insight response derives from the saved report and does not make an eligibility determination.
 
-Insights are recommendations derived from report findings, not a separate financial product or eligibility decision. They include a disclaimer directing students to confirm details with the institution or award provider.
+## Ownership and deletion
+
+The API derives `user_id` only from the verified access-token subject; request bodies cannot choose an owner. All repository selects, updates, and deletes include that owner. Findings are readable only when their run belongs to the current user. Storage is private and row-level policies apply to direct client access.

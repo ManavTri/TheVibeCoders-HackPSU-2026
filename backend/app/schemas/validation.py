@@ -1,6 +1,7 @@
 from datetime import datetime
-from decimal import Decimal
 from enum import StrEnum
+from typing import Any
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -8,18 +9,19 @@ from app.schemas.documents import DocumentSummary
 
 
 class Severity(StrEnum):
-    HIGH = "high"
-    MEDIUM = "medium"
-    LOW = "low"
+    ERROR = "error"
+    WARNING = "warning"
+    INFO = "info"
 
 
 class Finding(BaseModel):
     rule_id: str
     severity: Severity
     title: str
-    message: str
+    explanation: str
     document_ids: list[str]
-    details: dict[str, str | Decimal | int | None] = Field(default_factory=dict)
+    fields: dict[str, Any] = Field(default_factory=dict)
+    suggested_action: str
 
 
 class ValidationReport(BaseModel):
@@ -28,3 +30,11 @@ class ValidationReport(BaseModel):
     documents: list[DocumentSummary]
     findings: list[Finding]
     summary: str
+
+
+class ValidationRequest(BaseModel):
+    document_ids: list[UUID] | None = None
+
+
+class InsightsRequest(BaseModel):
+    run_id: UUID

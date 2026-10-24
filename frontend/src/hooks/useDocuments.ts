@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { createValidation, extractDocuments } from '../lib/api'
+import { createValidation, uploadDocument } from '../lib/api'
 import type { DocumentType, ValidationReport } from '../types/api'
 
 export function useDocuments() {
@@ -10,8 +10,14 @@ export function useDocuments() {
     setBusy(true)
     setError('')
     try {
-      const documents = await extractDocuments(files, documentTypes)
-      return await createValidation(documents)
+      const documents = await Promise.all(
+        files.map((file, index) => uploadDocument(file, documentTypes[index])),
+      )
+      const extracted = documents.filter((document) => document.status === 'extracted')
+      if (extracted.length < 2) {
+        throw new Error('At least two PDFs need readable text before they can be compared. Failed uploads remain in your documents so you can review or delete them.')
+      }
+      return await createValidation(extracted.map((document) => document.id))
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Something went wrong while checking these documents.')
       return null

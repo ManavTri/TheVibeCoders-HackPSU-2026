@@ -1,12 +1,18 @@
 from app.schemas.documents import FinancialDocument
 from app.schemas.validation import Finding
-from app.services.validation.rules.amount_mismatch import check_amounts
-from app.services.validation.rules.credit_requirement import check_credit_requirements
-from app.services.validation.rules.deadline_conflict import check_deadlines
-from app.services.validation.rules.term_mismatch import check_terms
+from app.services.validation.rules.amount_mismatch import AmountMismatchRule
+from app.services.validation.rules.base import Rule
+from app.services.validation.rules.credit_requirement import CreditRequirementRule
+from app.services.validation.rules.deadline_conflict import DeadlineConflictRule
+from app.services.validation.rules.term_mismatch import TermMismatchRule
 
-RULES = (check_amounts, check_deadlines, check_terms, check_credit_requirements)
+RULES: tuple[Rule, ...] = (
+    AmountMismatchRule(),
+    DeadlineConflictRule(),
+    TermMismatchRule(),
+    CreditRequirementRule(),
+)
 
 
 def validate_documents(documents: list[FinancialDocument]) -> list[Finding]:
-    return [finding for rule in RULES for finding in rule(documents)]
+    return [finding for rule in RULES for finding in rule.check(documents)]

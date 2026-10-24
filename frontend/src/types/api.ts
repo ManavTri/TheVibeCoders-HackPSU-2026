@@ -1,5 +1,6 @@
 export type DocumentType = 'award_letter' | 'tuition_bill' | 'study_abroad_quote'
-export type Severity = 'high' | 'medium' | 'low'
+export type DocumentStatus = 'uploaded' | 'extracted' | 'failed'
+export type Severity = 'error' | 'warning' | 'info'
 
 export interface FinancialDocument {
   id: string
@@ -13,15 +14,26 @@ export interface FinancialDocument {
   extracted_text?: string
 }
 
-export interface DocumentSummary extends Omit<FinancialDocument, 'extracted_text'> {}
+export interface DocumentRecord extends FinancialDocument {
+  status: DocumentStatus
+  created_at: string
+  extraction_error: string | null
+}
+
+export type DocumentSummary = Pick<
+  FinancialDocument,
+  'id' | 'filename' | 'document_type' | 'amount' | 'currency' | 'term' | 'deadline' | 'required_credits'
+>
 
 export interface Finding {
+  id?: string
   rule_id: string
   severity: Severity
   title: string
-  message: string
+  explanation: string
   document_ids: string[]
-  details: Record<string, string | number | null>
+  fields: Record<string, string | number | null>
+  suggested_action: string
 }
 
 export interface ValidationReport {
@@ -37,4 +49,13 @@ export interface Insights {
   headline: string
   recommendations: string[]
   disclaimer: string
+}
+
+export interface DocumentCorrection {
+  amount?: number | null
+  currency?: string
+  term?: string | null
+  deadline?: string | null
+  required_credits?: number | null
+  document_type?: DocumentType
 }

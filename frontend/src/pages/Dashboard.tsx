@@ -1,6 +1,27 @@
 import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+import { DocumentCard } from '../components/DocumentCard'
+import { deleteDocument, getDocuments } from '../lib/api'
+import type { DocumentRecord } from '../types/api'
 
 export function Dashboard() {
+  const [documents, setDocuments] = useState<DocumentRecord[]>([])
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    getDocuments().then(setDocuments).catch((cause: unknown) => setError(cause instanceof Error ? cause.message : 'Could not load documents.'))
+  }, [])
+
+  async function removeDocument(id: string) {
+    try {
+      await deleteDocument(id)
+      setDocuments((current) => current.filter((document) => document.id !== id))
+      setError('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not delete this document.')
+    }
+  }
+
   return (
     <main className="content-page page-wrap">
       <div className="page-heading">
@@ -23,6 +44,14 @@ export function Dashboard() {
           <div className="demo-callout"><span>✦</span><p>New here? Try the synthetic sample PDFs from our demo scenario.</p></div>
         </aside>
       </section>
+      {error && <p className="form-error" role="alert">{error}</p>}
+      {documents.length > 0 && <section className="dashboard-documents">
+        <div className="section-title"><div><div className="eyebrow">YOUR PRIVATE DOCUMENTS</div><h2>Document library</h2></div><span>{documents.length} saved</span></div>
+        <div className="dashboard-document-list">{documents.map((document) => <div className="dashboard-document-row" key={document.id}>
+          <div className="dashboard-document-main"><DocumentCard document={document} />{document.extraction_error && <p className="document-error">{document.extraction_error}</p>}</div>
+          <div className="document-row-actions"><span className={`document-status status-${document.status}`}>{document.status}</span><button type="button" className="remove-file" aria-label={`Delete ${document.filename}`} onClick={() => removeDocument(document.id)}>×</button></div>
+        </div>)}</div>
+      </section>}
       <footer className="site-footer"><span>ClearLedger © 2026</span><span>For planning support—not financial advice.</span><Link to="/">Back to home</Link></footer>
     </main>
   )

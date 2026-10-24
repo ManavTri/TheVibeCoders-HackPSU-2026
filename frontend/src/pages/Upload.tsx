@@ -59,9 +59,9 @@ export function Upload() {
           </div>)}
         </div>}
         {error && <p className="form-error" role="alert">{error}</p>}
-        <div className="upload-actions"><Button type="submit" disabled={busy}>{busy ? 'Reading your documents…' : 'Analyze documents'} <span aria-hidden="true">↗</span></Button><span>Files are processed by this demo API and not retained as uploaded files.</span></div>
+        <div className="upload-actions"><Button type="submit" disabled={busy}>{busy ? 'Reading your documents…' : 'Analyze documents'} <span aria-hidden="true">↗</span></Button><span>Uploaded to your private document library. Delete documents whenever you choose.</span></div>
       </form>
-      <div className="privacy-strip"><span>◈</span><p><b>Your documents deserve care.</b> Use synthetic or non-sensitive PDFs with this demo. Reports are temporary and disappear when the API restarts.</p></div>
+      <div className="privacy-strip"><span>◈</span><p><b>Your documents deserve care.</b> Documents are private to your account. This prototype extracts selectable PDF text; review fields before relying on findings.</p></div>
     </main>
   )
 }
