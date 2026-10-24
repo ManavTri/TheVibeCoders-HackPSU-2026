@@ -1,6 +1,6 @@
-.PHONY: dev test seed
+.PHONY: backend test seed frontend
 
-dev:
+backend:
 	cd backend && python -m uvicorn app.main:app --reload
 
 test:
@@ -8,3 +8,6 @@ test:
 
 seed:
 	@echo "Open sample_docs/scenario_1_mismatch and upload both PDFs in the app."
+
+frontend:
+	cd frontend && npm ci && npm run dev

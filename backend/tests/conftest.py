@@ -8,7 +8,13 @@ from app.main import app
 
 @pytest.fixture
 def client(monkeypatch) -> TestClient:
-    monkeypatch.setenv("REQUIRE_AUTH", "false")
+    for name, value in {
+        "REQUIRE_AUTH": "false",
+        "SUPABASE_URL": "",
+        "SUPABASE_SERVICE_KEY": "",
+        "SUPABASE_JWT_SECRET": "",
+    }.items():
+        monkeypatch.setenv(name, value)
     get_settings.cache_clear()
     clear_repositories()
     with TestClient(app) as test_client:
