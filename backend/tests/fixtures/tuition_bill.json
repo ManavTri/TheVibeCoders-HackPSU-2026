@@ -1,0 +1,11 @@
+{
+  "id": "bill-1",
+  "filename": "tuition_bill.pdf",
+  "document_type": "tuition_bill",
+  "amount": "18000",
+  "currency": "USD",
+  "term": "Spring 2026",
+  "deadline": "2026-08-01",
+  "required_credits": 6,
+  "extracted_text": "Synthetic test fixture"
+}
