@@ -60,10 +60,14 @@ All API paths are prefixed by `/api`.
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/documents` | Upload a PDF to private Storage, create a document row, and extract fields |
-| `GET` | `/documents` | List the authenticated user's documents |
+| `GET` | `/documents?state=active\|archived\|deleted` | List documents in the selected state (defaults to active) |
 | `GET` | `/documents/{id}` | Read document fields and extraction status |
 | `PATCH` | `/documents/{id}` | Correct extracted fields |
-| `DELETE` | `/documents/{id}` | Delete the private file and document row |
+| `POST` | `/documents/{id}/archive` | Archive a document without removing its file |
+| `POST` | `/documents/{id}/restore` | Restore an archived or soft-deleted document |
+| `POST` | `/documents/{id}/delete` | Soft-delete a document without removing its file |
+| `DELETE` | `/documents/{id}` | Permanently delete the private file and document row |
+| `GET` | `/findings` | Compute current findings from active, successfully extracted documents |
 | `POST` | `/validations` | Validate all extracted user documents or the supplied `document_ids` |
 | `GET` | `/validations/{run_id}` | Load a saved validation report |
 | `POST` | `/insights` | Create a student-oriented summary from `{ "run_id": "..." }` |

@@ -1,17 +1,19 @@
 # Data model
 
-The Supabase Postgres schema is created by [`backend/supabase/migrations/20261024000000_initial_schema.sql`](../backend/supabase/migrations/20261024000000_initial_schema.sql). RLS is enabled on each public table.
+The Supabase Postgres schema starts with [`backend/supabase/migrations/20261024000000_initial_schema.sql`](../backend/supabase/migrations/20261024000000_initial_schema.sql) and adds duplicate detection and lifecycle timestamps in [`backend/supabase/migrations/20261024000100_dedupe_and_soft_delete.sql`](../backend/supabase/migrations/20261024000100_dedupe_and_soft_delete.sql). RLS is enabled on each public table.
 
 | Table | Columns and purpose |
 |---|---|
 | `profiles` | `id` (UUID references `auth.users.id`), `name`, `university`, and `created_at`. An Auth trigger creates a profile when a new user signs up. |
-| `documents` | `id`, `user_id`, `type`, `filename`, `storage_path`, `status` (`uploaded` / `extracted` / `failed`), `extracted_json` (`jsonb`), and `created_at`. The JSON object stores changing extracted fields and optional extraction failure details without requiring a schema migration for every extraction tweak. |
+| `documents` | `id`, `user_id`, `type`, `filename`, `storage_path`, `status` (`uploaded` / `extracted` / `failed`), `extracted_json` (`jsonb`), `content_sha256`, `archived_at`, `deleted_at`, and `created_at`. The JSON object stores changing extracted fields and optional extraction failure details without requiring a schema migration for every extraction tweak. |
 | `validation_runs` | `id`, `user_id`, `created_at`, and `document_ids` (UUID array). Each run stores the documents it compared. |
 | `findings` | `id`, `run_id`, `rule_id`, `severity` (`error` / `warning` / `info`), `title`, `explanation`, `document_ids`, `fields` (`jsonb`), `suggested_action`, and `created_at`. |
 
 ## Private document objects
 
 PDF bytes live in the private Supabase Storage bucket `student-documents`, not in Postgres. Object paths use `{user_id}/{document_id}.pdf`. Database rows store the path; API document responses intentionally omit both `storage_path` and `user_id`. The authenticated user can delete the document through the backend, which removes the object and row.
+
+`content_sha256` is unique per user when present, so identical content cannot be uploaded twice by the same user; filenames alone are not unique. Document state is derived from the timestamps: `deleted_at` set means `deleted`, otherwise `archived_at` set means `archived`, otherwise `active`. Archive and soft-delete retain the file and metadata. `DELETE /documents/{id}` remains a permanent deletion.
 
 ## Extracted document contract
 
