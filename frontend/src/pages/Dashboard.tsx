@@ -52,7 +52,7 @@ export function Dashboard() {
           <div className="document-row-actions"><span className={`document-status status-${document.status}`}>{document.status}</span><button type="button" className="remove-file" aria-label={`Delete ${document.filename}`} onClick={() => removeDocument(document.id)}>×</button></div>
         </div>)}</div>
       </section>}
-      <footer className="site-footer"><span>ClearLedger © 2026</span><span>For planning support—not financial advice.</span><Link to="/">Back to home</Link></footer>
+      <footer className="site-footer"><span>Muni © 2026</span><span>For planning support—not financial advice.</span><Link to="/">Back to home</Link></footer>
     </main>
   )
 }

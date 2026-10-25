@@ -26,7 +26,7 @@ export function Landing() {
           <div className="paper-stack">
             <div className="paper-back"><i /><i /><i /></div>
             <div className="paper-front">
-              <div className="paper-brand"><span>↗</span> CLEARLEDGER <small>STUDENT AWARD</small></div>
+              <div className="paper-brand"><span>M</span> MUNI <small>STUDENT AWARD</small></div>
               <div className="paper-line short" /><div className="paper-line" />
               <div className="paper-amount">$12,000</div>
               <div className="paper-line medium" />
@@ -42,7 +42,7 @@ export function Landing() {
         <div><div className="eyebrow">LESS GUESSING, MORE KNOWING</div><h2>Your documents.<br />One clearer picture.</h2></div>
         <p>We help you connect the dots between your financial documents—so you can spot questions early and make your next move with confidence.</p>
       </section>
-      <footer className="site-footer"><span>ClearLedger © 2026</span><span>Built for students, with students.</span><Link to="/upload">Start a check →</Link></footer>
+      <footer className="site-footer"><span>Muni © 2026</span><span>Built for students, with students.</span><Link to="/upload">Start a check →</Link></footer>
     </main>
   )
 }

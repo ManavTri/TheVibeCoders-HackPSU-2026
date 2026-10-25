@@ -45,7 +45,7 @@ export function Report() {
         {report.findings.length > 0 ? <div className="finding-list">{report.findings.map((finding, index) => <FindingCard key={`${finding.rule_id}-${index}`} finding={finding} index={index} />)}</div> : <div className="empty-findings"><span>✓</span><div><b>No potential inconsistencies found.</b><p>We could not detect a conflict in the fields we read. Missing fields may still need manual review.</p></div></div>}
       </section>
       <section className="report-section"><InsightsPanel insights={insights} /></section>
-      <footer className="site-footer"><span>ClearLedger © 2026</span><span>Confirm details with your financial-aid office or provider.</span><Link to="/">Home</Link></footer>
+      <footer className="site-footer"><span>Muni © 2026</span><span>Confirm details with your financial-aid office or provider.</span><Link to="/">Home</Link></footer>
     </main>
   )
 }

@@ -113,7 +113,7 @@ function AuthPanel() {
     <div className="mx-auto mt-10 max-w-md rounded-3xl border border-slate-800 bg-[#0b0e12] p-7 shadow-xl">
       <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Private student workspace</p>
       <h2 className="mt-3 text-3xl font-semibold text-white">{mode === 'signin' ? 'Welcome back' : 'Create your account'}</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-400">Sign in with your Supabase account to securely manage your financial documents.</p>
+      <p className="mt-2 text-sm leading-6 text-slate-400">Sign in securely to manage your financial documents.</p>
       <form className="mt-6 space-y-4" onSubmit={submit}>
         {mode === 'signup' && <label className="block text-sm text-slate-300">Name
           <input className="mt-2 w-full rounded-xl border border-slate-700 bg-[#111821] px-3 py-2 text-white" value={name} onChange={(event) => setName(event.target.value)} required />
@@ -131,7 +131,7 @@ function AuthPanel() {
         </button>
       </form>
       <p className="mt-5 text-center text-sm text-slate-400">
-        {mode === 'signin' ? 'New to EduCash?' : 'Already have an account?'}{' '}
+        {mode === 'signin' ? 'New to Muni?' : 'Already have an account?'}{' '}
         <button className="font-semibold text-white underline" type="button" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setMessage('') }}>
           {mode === 'signin' ? 'Create account' : 'Sign in'}
         </button>
@@ -547,7 +547,7 @@ function App() {
     if (activePage === 'AI Chat') {
       return <div><p className="text-sm uppercase tracking-[0.25em] text-[#5f6b76]">Ask about your finances</p><h2 className="mt-2 text-3xl font-semibold text-[#1b2430]">AI financial assistant</h2><p className="mt-2 text-sm text-slate-500">Get document-grounded answers, prepare corrections, or request a fresh validation.</p></div>
     }
-    return <SectionCard title="Account settings" subtitle="Supabase authentication and account status">
+    return <SectionCard title="Account settings" subtitle="Authentication and account status">
       <div className="rounded-xl border border-slate-800 bg-[#0f141a] p-4"><p className="text-xs uppercase tracking-wider text-slate-400">Signed in as</p><p className="mt-2 text-white">{session?.user?.email || 'Local development identity'}</p></div>
       <p className="mt-4 text-sm leading-6 text-slate-400">The backend does not yet provide profile read or update endpoints. Name and university preferences are tracked in the API gap list.</p>
       {session && <button type="button" onClick={() => void signOut()} className="mt-5 rounded-xl border border-slate-700 px-4 py-2 text-sm text-white">Sign out</button>}
@@ -570,7 +570,7 @@ function App() {
       <main className="min-w-0 flex-1 p-4 sm:p-7 xl:p-9">
         <div className="mx-auto max-w-[1500px]">
           <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
-            <div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">EduCash · Student finance</p><p className="mt-1 text-sm text-slate-600">{session?.user?.email || 'Local demo'}</p></div>
+            <div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Muni · Campus clarity</p><p className="mt-1 text-sm text-slate-600">{session?.user?.email || 'Local demo'}</p></div>
             <div className="flex items-center gap-3">
               {!supabase && <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600">Local demo mode</span>}
               {session && <button type="button" onClick={() => void signOut()} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700">Sign out</button>}

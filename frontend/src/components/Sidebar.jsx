@@ -12,11 +12,11 @@ export function Sidebar({ activePage, onChange, aidSnapshot = '—' }) {
     <aside className="w-full border-b border-[#1d232b] bg-[#0a0d11] p-5 backdrop-blur xl:w-72 xl:border-b-0 xl:border-r">
       <div className="mb-8 flex items-center gap-3">
         <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#e7ebee] text-lg font-bold text-[#0a0d11] shadow-sm">
-          E
+          M
         </div>
         <div>
-          <h1 className="text-3xl font-semibold tracking-[-0.05em] text-white">EduCash</h1>
-          <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-slate-300">Student finance</p>
+          <h1 className="text-3xl font-semibold tracking-[-0.05em] text-white">Muni</h1>
+          <p className="mt-1 text-[10px] uppercase tracking-[0.22em] text-[#b8d8ff]">Campus clarity</p>
         </div>
       </div>
 

@@ -137,7 +137,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-5 py-4">
         <div>
-          <h2 className="font-semibold text-slate-900">EduCash assistant</h2>
+          <h2 className="font-semibold text-slate-900">Muni assistant</h2>
           <p className="mt-1 text-xs text-slate-500">Document-grounded help · no saved chat history</p>
         </div>
         <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
@@ -161,7 +161,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
             }`}
           >
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider opacity-70">
-              {turn.role === 'user' ? 'You' : 'EduCash'}
+              {turn.role === 'user' ? 'You' : 'Muni'}
             </p>
             {turn.content}
             {turn.sources?.length > 0 && (
@@ -230,7 +230,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
             void send(message)
           }}
         >
-          <label className="sr-only" htmlFor="financial-chat-message">Message the EduCash assistant</label>
+          <label className="sr-only" htmlFor="financial-chat-message">Message the Muni assistant</label>
           <textarea
             id="financial-chat-message"
             rows={2}

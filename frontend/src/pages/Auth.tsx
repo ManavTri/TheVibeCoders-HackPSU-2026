@@ -69,7 +69,7 @@ export function Auth() {
           {message && <p className="auth-message" role="status">{message}</p>}
           <button className="button button-primary" type="submit" disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'} <span>↗</span></button>
         </form>
-        <p className="auth-toggle">{mode === 'signin' ? 'New to ClearLedger?' : 'Already have an account?'} <button type="button" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setMessage('') }}>{mode === 'signin' ? 'Create an account' : 'Sign in'}</button></p>
+        <p className="auth-toggle">{mode === 'signin' ? 'New to Muni?' : 'Already have an account?'} <button type="button" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(''); setMessage('') }}>{mode === 'signin' ? 'Create an account' : 'Sign in'}</button></p>
       </div>
       <Link to="/" className="back-link">← Back home</Link>
     </main>
