@@ -1,0 +1,126 @@
+{
+  "document_type": "award_letter",
+  "type_confidence": 0.98,
+  "issuer": "Alder Ridge University Office of Financial Aid",
+  "currency": "USD",
+  "term": "Academic Year 2026-2027",
+  "academic_year": "2026-2027",
+  "terms": [
+    "Fall 2026",
+    "Spring 2027"
+  ],
+  "document_date": "2026-07-20",
+  "total_amount": "11500.00",
+  "required_credits": 12,
+  "min_gpa": "3.00",
+  "enrollment_credits": null,
+  "deadlines": [
+    {
+      "label": "Accept or decline Spring 2027 Direct Loan disbursement",
+      "date": "2026-10-30"
+    }
+  ],
+  "payment_due_dates": [],
+  "exchange_rate": null,
+  "line_items": [
+    {
+      "label": "Alder Ridge Merit Scholarship",
+      "amount": "3000.00",
+      "category": "scholarship",
+      "direction": "credit",
+      "kind": "scholarship",
+      "term": "Fall 2026",
+      "date": "2026-09-08"
+    },
+    {
+      "label": "Commonwealth State Grant",
+      "amount": "1000.00",
+      "category": "grant",
+      "direction": "credit",
+      "kind": "grant",
+      "term": "Fall 2026",
+      "date": "2026-09-08"
+    },
+    {
+      "label": "Federal Direct Subsidized Loan",
+      "amount": "1750.00",
+      "category": "loan",
+      "direction": "credit",
+      "kind": "loan",
+      "term": "Fall 2026",
+      "date": "2026-09-08"
+    },
+    {
+      "label": "Alder Ridge Merit Scholarship",
+      "amount": "3000.00",
+      "category": "scholarship",
+      "direction": "credit",
+      "kind": "scholarship",
+      "term": "Spring 2027",
+      "date": "2027-02-01"
+    },
+    {
+      "label": "Commonwealth State Grant",
+      "amount": "1000.00",
+      "category": "grant",
+      "direction": "credit",
+      "kind": "grant",
+      "term": "Spring 2027",
+      "date": "2027-01-11"
+    },
+    {
+      "label": "Federal Direct Subsidized Loan",
+      "amount": "1750.00",
+      "category": "loan",
+      "direction": "credit",
+      "kind": "loan",
+      "term": "Spring 2027",
+      "date": "2027-01-11"
+    }
+  ],
+  "disbursements": [
+    {
+      "date": "2026-09-08",
+      "amount": "3000.00",
+      "term": "Fall 2026",
+      "award_label": "Alder Ridge Merit Scholarship"
+    },
+    {
+      "date": "2026-09-08",
+      "amount": "1000.00",
+      "term": "Fall 2026",
+      "award_label": "Commonwealth State Grant"
+    },
+    {
+      "date": "2026-09-08",
+      "amount": "1750.00",
+      "term": "Fall 2026",
+      "award_label": "Federal Direct Subsidized Loan"
+    },
+    {
+      "date": "2027-02-01",
+      "amount": "3000.00",
+      "term": "Spring 2027",
+      "award_label": "Alder Ridge Merit Scholarship"
+    },
+    {
+      "date": "2027-01-11",
+      "amount": "1000.00",
+      "term": "Spring 2027",
+      "award_label": "Commonwealth State Grant"
+    },
+    {
+      "date": "2027-01-11",
+      "amount": "1750.00",
+      "term": "Spring 2027",
+      "award_label": "Federal Direct Subsidized Loan"
+    }
+  ],
+  "conditions": [
+    "Merit Scholarship requires enrollment in at least 12 credits each term",
+    "Merit Scholarship requires a cumulative GPA of at least 3.00 at the end of each term"
+  ],
+  "summary": "2026-27 aid: $11,500 total ($5,750 per term) across a merit scholarship, a state grant and a subsidized loan.",
+  "action_required": true,
+  "action_reason": "Spring loan disbursement must be accepted or declined by October 30, 2026."
+}

@@ -1,0 +1,48 @@
+{
+  "document_type": "housing_contract",
+  "type_confidence": 0.97,
+  "issuer": "Alder Ridge University Residence Life",
+  "currency": "USD",
+  "term": "2026-2027 Academic Year",
+  "terms": [
+    "Fall 2026",
+    "Spring 2027"
+  ],
+  "academic_year": "2026-2027",
+  "document_date": "2026-03-02",
+  "total_amount": "6400.00",
+  "required_credits": null,
+  "min_gpa": null,
+  "enrollment_credits": null,
+  "deadlines": [
+    {
+      "label": "Spring 2027 housing cancellation without penalty",
+      "date": "2026-12-01"
+    }
+  ],
+  "payment_due_dates": [],
+  "exchange_rate": null,
+  "line_items": [
+    {
+      "label": "Room rate - Fall 2026",
+      "amount": "3100.00",
+      "category": "housing",
+      "direction": "charge",
+      "kind": "housing",
+      "term": "Fall 2026"
+    },
+    {
+      "label": "Room rate - Spring 2027",
+      "amount": "3300.00",
+      "category": "housing",
+      "direction": "charge",
+      "kind": "housing",
+      "term": "Spring 2027"
+    }
+  ],
+  "disbursements": [],
+  "conditions": [],
+  "summary": "Residence hall agreement: $3,100.00 for Fall 2026 and $3,300.00 for Spring 2027.",
+  "action_required": false,
+  "action_reason": null
+}

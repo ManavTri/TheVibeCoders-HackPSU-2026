@@ -1,0 +1,218 @@
+{
+  "scenario": "scenario_3_two_term_demo",
+  "today": "2026-10-25",
+  "status_note": "HAND-COMPUTED from the documents, not produced by the engine. Where a rule's exact semantics are ambiguous, impact_amount_any_of lists every defensible value. A mismatch means either an engine bug or a wrong expectation here: investigate before changing either.",
+  "documents": [
+    {
+      "file": "01_award_letter_AY2026-27.pdf",
+      "type": "award_letter",
+      "term_as_written": "Academic Year 2026-2027 (FA26 / SP27 in schedule)"
+    },
+    {
+      "file": "02_fall_2026_bill.pdf",
+      "type": "tuition_bill",
+      "term_as_written": "Fall 2026"
+    },
+    {
+      "file": "03_spring_2027_bill.pdf",
+      "type": "tuition_bill",
+      "term_as_written": "Spring Semester 2027"
+    },
+    {
+      "file": "04_study_abroad_quote_spring_2027.pdf",
+      "type": "study_abroad_quote",
+      "term_as_written": "Spring 2027"
+    },
+    {
+      "file": "05_housing_contract_2026-27.pdf",
+      "type": "housing_contract",
+      "term_as_written": "Fall 2026 / Spring 2027"
+    },
+    {
+      "file": "06_payment_plan_spring_2027.pdf",
+      "type": "payment_plan",
+      "term_as_written": "Spring 2027 (SP27)"
+    }
+  ],
+  "ledger": {
+    "Fall 2026": {
+      "billed_charges": "13950.00",
+      "aid_credits": "5750.00",
+      "payments": "8200.00",
+      "net_balance": "0.00"
+    },
+    "Spring 2027": {
+      "billed_charges": "11700.00",
+      "aid_credits_on_bill": "5250.00",
+      "payments": "0.00",
+      "net_balance_after_listed_aid": "6450.00",
+      "estimates_not_in_billed_charges": {
+        "study_abroad_quote_total": "14300.00"
+      }
+    },
+    "award_letter": {
+      "annual_aid": "11500.00",
+      "per_term_aid": "5750.00"
+    },
+    "housing_contract_total": "6400.00"
+  },
+  "expected_findings": [
+    {
+      "id": "E1",
+      "rule_id": "award.amount_mismatch",
+      "term": "Spring 2027",
+      "severity": "error",
+      "impact_amount_any_of": [
+        "500.00"
+      ],
+      "why": "Merit Scholarship: $3,000.00 in the award letter vs $2,500.00 credited on the Spring bill."
+    },
+    {
+      "id": "E2",
+      "rule_id": "timing.disbursement_after_due",
+      "term": "Spring 2027",
+      "severity": "warning",
+      "impact_amount_any_of": [
+        "3000.00",
+        "2500.00"
+      ],
+      "why": "Merit Scholarship disburses Feb 1, 2027, 17 days after the Jan 15 due date; the bill states a $50.00 late fee. Grant and loan disburse Jan 11 (before due) and must NOT be flagged."
+    },
+    {
+      "id": "E3",
+      "rule_id": "eligibility.credit_requirement",
+      "term": "Spring 2027",
+      "severity": "error",
+      "impact_amount_any_of": [
+        "3000.00",
+        "2500.00"
+      ],
+      "why": "Merit Scholarship requires 12 credits; the Spring bill shows 9."
+    },
+    {
+      "id": "E4",
+      "rule_id": "coverage.term_gap",
+      "term": "Spring 2027",
+      "severity": "warning",
+      "impact_amount_any_of": [
+        "6450.00",
+        "450.00"
+      ],
+      "why": "11,700.00 charges - 5,250.00 listed aid = 6,450.00 unpaid. Could show 450.00 if the engine counts the plan's $6,000.00 of scheduled installments as covering it. Not an error: due date is in the future."
+    },
+    {
+      "id": "E5",
+      "rule_id": "plan.installment_total",
+      "term": "Spring 2027",
+      "severity": "warning",
+      "impact_amount_any_of": [
+        "450.00"
+      ],
+      "why": "4 x 1,500.00 = 6,000.00 vs plan balance 6,450.00."
+    },
+    {
+      "id": "E6",
+      "rule_id": "housing.contract_vs_bill",
+      "term": "Spring 2027",
+      "severity": "warning",
+      "impact_amount_any_of": [
+        "200.00"
+      ],
+      "why": "Contract Spring rate 3,300.00 vs 3,100.00 billed. Fall matches and must NOT be flagged."
+    },
+    {
+      "id": "E7",
+      "rule_id": "program.double_charge",
+      "term": "Spring 2027",
+      "severity": "warning",
+      "impact_amount_any_of": [
+        "6750.00",
+        "8400.00"
+      ],
+      "why": "Provider program tuition (8,400.00) and home tuition (6,750.00) both appear for Spring 2027."
+    },
+    {
+      "id": "E8",
+      "rule_id": "timing.deadline_status",
+      "term": null,
+      "severity": "warning",
+      "impact_amount_any_of": [],
+      "why": "Spring loan acceptance deadline October 30, 2026 is 5 days after the intended 'today' (becomes an error once overdue)."
+    },
+    {
+      "id": "E9",
+      "rule_id": "eligibility.*",
+      "term": null,
+      "severity": "info",
+      "impact_amount_any_of": [],
+      "why": "ONE grouped info telling the student the 3.00 GPA condition must be verified after each term (not one info per condition)."
+    }
+  ],
+  "expected_absent": [
+    {
+      "id": "A1",
+      "description": "No Fall 2026 coverage finding (term_gap or term_surplus): the balance is exactly 0.00.",
+      "rule_prefix": "coverage.",
+      "term": "Fall 2026"
+    },
+    {
+      "id": "A2",
+      "description": "No generic 'terms differ' or 'dates differ' findings; spellings Fall 2026 / FA26 and Spring 2027 / Spring Semester 2027 / SP27 are the same terms.",
+      "rule_ids": [
+        "term.mismatch",
+        "deadline.different_dates",
+        "term_mismatch",
+        "deadline_conflict"
+      ]
+    },
+    {
+      "id": "A3",
+      "description": "No award.missing_on_bill: all three awards appear on both bills.",
+      "rule_prefix": "award.missing_on_bill"
+    },
+    {
+      "id": "A4",
+      "description": "No amount mismatch for Fall 2026, the State Grant or the Direct Loan.",
+      "rule_prefix": "award.amount_mismatch",
+      "term": "Fall 2026"
+    },
+    {
+      "id": "A5",
+      "description": "No duplicate.award finding.",
+      "rule_prefix": "duplicate."
+    },
+    {
+      "id": "A6",
+      "description": "No quality.data_gaps finding: every document has a parseable term, amounts and dates.",
+      "rule_prefix": "quality."
+    },
+    {
+      "id": "A7",
+      "description": "No currency.mismatch finding: everything is USD.",
+      "rule_prefix": "currency."
+    },
+    {
+      "id": "A8",
+      "description": "No housing mismatch for Fall 2026.",
+      "rule_prefix": "housing.",
+      "term": "Fall 2026"
+    },
+    {
+      "id": "A9",
+      "description": "No disbursement_after_due finding for the State Grant or Direct Loan (they disburse before the due date).",
+      "rule_prefix": "timing.disbursement_after_due",
+      "max_count_for_term": {
+        "Spring 2027": 1
+      }
+    },
+    {
+      "id": "A10",
+      "description": "No deadline findings for the quote deadlines (Nov 15 / Nov 30), the housing cancellation (Dec 1) or the plan enrollment (Dec 15): all are more than 14 days away.",
+      "rule_prefix": "timing.deadline_status",
+      "max_count": 1
+    }
+  ],
+  "limits": {
+    "max_default_info_findings": 3
+  }
+}

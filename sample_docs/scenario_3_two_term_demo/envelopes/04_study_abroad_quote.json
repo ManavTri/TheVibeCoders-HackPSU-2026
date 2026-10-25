@@ -1,0 +1,69 @@
+{
+  "document_type": "study_abroad_quote",
+  "type_confidence": 0.97,
+  "issuer": "Atlantic Exchange Programs",
+  "currency": "USD",
+  "term": "Spring 2027",
+  "terms": [
+    "Spring 2027"
+  ],
+  "academic_year": null,
+  "document_date": "2026-10-10",
+  "total_amount": "14300.00",
+  "required_credits": null,
+  "min_gpa": null,
+  "enrollment_credits": null,
+  "deadlines": [
+    {
+      "label": "Application deadline",
+      "date": "2026-11-15"
+    },
+    {
+      "label": "Quote valid through",
+      "date": "2026-11-30"
+    }
+  ],
+  "payment_due_dates": [],
+  "exchange_rate": null,
+  "line_items": [
+    {
+      "label": "Program Tuition (billed by the provider)",
+      "amount": "8400.00",
+      "category": "tuition",
+      "direction": "charge",
+      "kind": "tuition",
+      "term": "Spring 2027"
+    },
+    {
+      "label": "Partner Residence (housing)",
+      "amount": "3600.00",
+      "category": "housing",
+      "direction": "charge",
+      "kind": "housing",
+      "term": "Spring 2027"
+    },
+    {
+      "label": "Program and Insurance Fee",
+      "amount": "950.00",
+      "category": "program_fee",
+      "direction": "charge",
+      "kind": "program_fee",
+      "term": "Spring 2027"
+    },
+    {
+      "label": "Estimated Round-Trip Airfare (estimate)",
+      "amount": "1350.00",
+      "category": "travel",
+      "direction": "charge",
+      "kind": "travel",
+      "term": "Spring 2027"
+    }
+  ],
+  "disbursements": [],
+  "conditions": [
+    "Estimate only; program tuition is separate from home-institution tuition"
+  ],
+  "summary": "Estimated $14,300.00 for a Spring 2027 semester abroad in Lisbon.",
+  "action_required": false,
+  "action_reason": null
+}

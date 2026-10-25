@@ -1,0 +1,100 @@
+{
+  "document_type": "tuition_bill",
+  "type_confidence": 0.98,
+  "issuer": "Alder Ridge University Office of the Bursar",
+  "currency": "USD",
+  "term": "Fall 2026",
+  "terms": [
+    "Fall 2026"
+  ],
+  "academic_year": null,
+  "document_date": "2026-09-14",
+  "total_amount": "13950.00",
+  "required_credits": null,
+  "min_gpa": null,
+  "enrollment_credits": 12,
+  "deadlines": [],
+  "payment_due_dates": [
+    {
+      "label": "Payment due",
+      "date": "2026-09-15",
+      "term": "Fall 2026"
+    }
+  ],
+  "exchange_rate": null,
+  "line_items": [
+    {
+      "label": "Tuition (12 credits)",
+      "amount": "9000.00",
+      "category": "tuition",
+      "direction": "charge",
+      "kind": "tuition",
+      "term": "Fall 2026"
+    },
+    {
+      "label": "Technology and Student Fees",
+      "amount": "650.00",
+      "category": "fees",
+      "direction": "charge",
+      "kind": "fees",
+      "term": "Fall 2026"
+    },
+    {
+      "label": "Residence Hall - Fall 2026",
+      "amount": "3100.00",
+      "category": "housing",
+      "direction": "charge",
+      "kind": "housing",
+      "term": "Fall 2026"
+    },
+    {
+      "label": "Meal Plan - Fall 2026",
+      "amount": "1200.00",
+      "category": "meals",
+      "direction": "charge",
+      "kind": "meals",
+      "term": "Fall 2026"
+    },
+    {
+      "label": "Alder Ridge Merit Scholarship",
+      "amount": "3000.00",
+      "category": "scholarship",
+      "direction": "credit",
+      "kind": "scholarship",
+      "term": "Fall 2026",
+      "date": "2026-09-08"
+    },
+    {
+      "label": "Commonwealth State Grant",
+      "amount": "1000.00",
+      "category": "grant",
+      "direction": "credit",
+      "kind": "grant",
+      "term": "Fall 2026",
+      "date": "2026-09-08"
+    },
+    {
+      "label": "Federal Direct Subsidized Loan",
+      "amount": "1750.00",
+      "category": "loan",
+      "direction": "credit",
+      "kind": "loan",
+      "term": "Fall 2026",
+      "date": "2026-09-08"
+    },
+    {
+      "label": "Payment received",
+      "amount": "8200.00",
+      "category": "payment",
+      "direction": "credit",
+      "kind": "payment",
+      "term": "Fall 2026",
+      "date": "2026-09-12"
+    }
+  ],
+  "disbursements": [],
+  "conditions": [],
+  "summary": "Fall 2026 charges of $13,950.00 are fully covered by aid and a payment; balance is $0.00.",
+  "action_required": false,
+  "action_reason": null
+}

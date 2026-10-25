@@ -1,0 +1,90 @@
+{
+  "document_type": "payment_plan",
+  "type_confidence": 0.97,
+  "issuer": "Alder Ridge University Office of the Bursar",
+  "currency": "USD",
+  "term": "Spring 2027 (SP27)",
+  "terms": [
+    "Spring 2027"
+  ],
+  "academic_year": null,
+  "document_date": "2026-10-21",
+  "total_amount": "6450.00",
+  "required_credits": null,
+  "min_gpa": null,
+  "enrollment_credits": null,
+  "deadlines": [
+    {
+      "label": "Payment plan enrollment deadline",
+      "date": "2026-12-15"
+    }
+  ],
+  "payment_due_dates": [
+    {
+      "label": "Installment 1",
+      "date": "2027-01-15",
+      "term": "Spring 2027"
+    },
+    {
+      "label": "Installment 2",
+      "date": "2027-02-15",
+      "term": "Spring 2027"
+    },
+    {
+      "label": "Installment 3",
+      "date": "2027-03-15",
+      "term": "Spring 2027"
+    },
+    {
+      "label": "Installment 4",
+      "date": "2027-04-15",
+      "term": "Spring 2027"
+    }
+  ],
+  "exchange_rate": null,
+  "line_items": [
+    {
+      "label": "Installment 1",
+      "amount": "1500.00",
+      "category": "installment",
+      "direction": "unknown",
+      "kind": "payment",
+      "term": "Spring 2027",
+      "date": "2027-01-15"
+    },
+    {
+      "label": "Installment 2",
+      "amount": "1500.00",
+      "category": "installment",
+      "direction": "unknown",
+      "kind": "payment",
+      "term": "Spring 2027",
+      "date": "2027-02-15"
+    },
+    {
+      "label": "Installment 3",
+      "amount": "1500.00",
+      "category": "installment",
+      "direction": "unknown",
+      "kind": "payment",
+      "term": "Spring 2027",
+      "date": "2027-03-15"
+    },
+    {
+      "label": "Installment 4",
+      "amount": "1500.00",
+      "category": "installment",
+      "direction": "unknown",
+      "kind": "payment",
+      "term": "Spring 2027",
+      "date": "2027-04-15"
+    }
+  ],
+  "disbursements": [],
+  "conditions": [
+    "Plan balance reflects anticipated aid of $5,250.00"
+  ],
+  "summary": "Four $1,500.00 installments (total $6,000.00) against a plan balance of $6,450.00.",
+  "action_required": true,
+  "action_reason": "Enroll in the plan by December 15, 2026; first installment due January 15, 2027."
+}
