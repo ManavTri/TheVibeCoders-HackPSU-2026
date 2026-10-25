@@ -13,6 +13,7 @@ The repository includes synthetic PDFs, so the demo can be run without using rea
 ## What Muni does
 
 - Extracts key fields from financial PDFs
+- Identifies document types automatically, with an optional type hint
 - Groups charges, aid, payments, and estimates by academic term
 - Flags mismatched amounts, missing credits, deadlines, coverage gaps, and possible duplicate charges
 - Lets students correct extracted fields and rerun a check

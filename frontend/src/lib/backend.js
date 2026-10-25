@@ -86,10 +86,10 @@ export function getValidation(id) {
   return requestJson(`/validations/${encodeURIComponent(id)}`)
 }
 
-export function uploadDocument(file, documentType) {
+export function uploadDocument(file, documentTypeHint) {
   const body = new FormData()
   body.append('file', file)
-  body.append('document_type', documentType)
+  if (documentTypeHint) body.append('document_type_hint', documentTypeHint)
   return requestJson('/documents', { method: 'POST', body })
 }
 

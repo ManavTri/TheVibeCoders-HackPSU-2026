@@ -325,21 +325,9 @@ function App() {
     setSelectedDocument(document)
   }
 
-  function inferDocumentType(filename) {
-    const normalized = filename.toLowerCase()
-    if (normalized.includes('tuition') || normalized.includes('bill') || normalized.includes('invoice')) return 'tuition_bill'
-    if (normalized.includes('abroad') || normalized.includes('program') || normalized.includes('quote')) return 'study_abroad_quote'
-    if (normalized.includes('scholarship') || normalized.includes('award')) return 'award_letter'
-    return ''
-  }
-
   async function uploadSelectedFiles() {
     if (!selectedFiles.length) {
       setError('Choose at least one PDF to upload.')
-      return
-    }
-    if (selectedFiles.some((item) => !(uploadTypes[item.id] || inferDocumentType(item.file.name)))) {
-      setError('Choose a supported document type for each PDF before uploading.')
       return
     }
     setBusy(true)
@@ -350,7 +338,7 @@ function App() {
     for (const item of selectedFiles) {
       const { file } = item
       try {
-        const result = await uploadDocument(file, uploadTypes[item.id] || inferDocumentType(file.name))
+        const result = await uploadDocument(file, uploadTypes[item.id] || undefined)
         results.push(result)
         if (result.status === 'failed') failures.push(`${file.name}: ${result.extraction_error || 'Text extraction failed.'}`)
       } catch (cause) {
@@ -359,19 +347,7 @@ function App() {
     }
     setSelectedFiles([])
     setUploadTypes({})
-    const refreshedData = await reloadData()
-    const extracted = refreshedData?.active.filter((document) => document.status === 'extracted') || []
-    if (extracted.length >= 2) {
-      try {
-        const nextReport = await createValidation(extracted.map((document) => document.id))
-        const nextInsights = await createInsights(nextReport.id)
-        setReport(nextReport)
-        setInsights(nextInsights)
-        setActivePage('Financial Insights')
-      } catch (cause) {
-        failures.push(errorText(cause, 'Documents uploaded, but the comparison could not be completed.'))
-      }
-    }
+    await reloadData()
     if (results.length) setNotice(`${results.length} document${results.length === 1 ? '' : 's'} uploaded.`)
     if (failures.length) setError(failures.join(' '))
     setBusy(false)
@@ -389,6 +365,7 @@ function App() {
       const nextInsights = await createInsights(nextReport.id)
       setReport(nextReport)
       setInsights(nextInsights)
+      setActivePage('Financial Insights')
     } catch (cause) {
       setError(errorText(cause, 'Unable to run a financial document check.'))
     } finally {
@@ -518,19 +495,20 @@ function App() {
   function renderDocuments() {
     return (
       <div className="space-y-6">
-        <div><p className="text-sm uppercase tracking-[0.25em] text-[#5f6b76]">Private document library</p><h2 className="mt-2 text-3xl font-semibold text-[#1b2430]">Documents</h2><p className="mt-2 text-sm text-slate-500">Upload, correct, compare, archive, or delete your financial PDFs.</p></div>
+        <div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-sm uppercase tracking-[0.25em] text-[#5f6b76]">Private document library</p><h2 className="mt-2 text-3xl font-semibold text-[#1b2430]">Documents</h2><p className="mt-2 text-sm text-slate-500">Upload, review, correct, compare, archive, or delete your financial PDFs.</p></div><button type="button" onClick={() => void runCheck()} disabled={busy || activeExtracted.length < 2} className="rounded-xl bg-[#111821] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">{busy ? 'Checking…' : 'Check these documents'}</button></div>
         <SectionCard title="Add financial PDFs" subtitle="Files are stored privately and extracted by the backend">
           <DocumentDropzone onFilesAdded={handleFilesAdded} />
           {selectedFiles.length > 0 && <div className="mt-4 space-y-2">
             {selectedFiles.map(({ id, file }) => <div key={id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#0f141a] p-3">
               <div className="min-w-0"><p className="truncate text-sm text-white">{file.name}</p><p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p></div>
-              <select aria-label={`Document type for ${file.name}`} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white" value={uploadTypes[id] ?? inferDocumentType(file.name)} onChange={(event) => setUploadTypes((current) => ({ ...current, [id]: event.target.value }))}>
-                <option value="">Choose document type</option>
+              <select aria-label={`Optional document type hint for ${file.name}`} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white" value={uploadTypes[id] ?? ''} onChange={(event) => setUploadTypes((current) => ({ ...current, [id]: event.target.value }))}>
+                <option value="">Let Muni identify it</option>
                 {documentTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
               <button type="button" className="text-sm text-slate-400 hover:text-white" onClick={() => setSelectedFiles((current) => current.filter((selected) => selected.id !== id))} aria-label={`Remove ${file.name} from upload list`}>Remove</button>
             </div>)}
-            <button type="button" disabled={busy} onClick={() => void uploadSelectedFiles()} className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{busy ? 'Uploading and checking…' : 'Upload and compare'}</button>
+            <p className="text-xs text-slate-400">A type hint is optional. Muni identifies the document from its contents.</p>
+            <button type="button" disabled={busy} onClick={() => void uploadSelectedFiles()} className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{busy ? 'Uploading and reading…' : 'Upload for review'}</button>
           </div>}
         </SectionCard>
         <SectionCard title="Your files" subtitle="Document records and lifecycle state">
