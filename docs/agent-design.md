@@ -12,8 +12,8 @@ they are missing or Gemini is unavailable, the API returns a friendly 503. The
 manual function-calling loop uses the `google-genai` SDK with automatic function
 calling disabled. It makes at most six model calls, has a 40-second wall-clock
 budget, and caps generated output at 1,024 tokens. A per-user in-memory token
-bucket allows at most five chat requests per 10 minutes, with one concurrent
-chat per user. Confirm/cancel endpoints have a separate limit of five calls
+bucket allows at most 20 chat requests per 10 minutes, with one concurrent
+chat per user. Confirm/cancel endpoints have a separate limit of 10 calls
 per 10 minutes. Large document, finding, and deadline results are capped
 before being sent to the model; totals indicate when a result was truncated.
 
@@ -78,12 +78,19 @@ or introduce shared server-side state before scaling out.
 - **Destructive actions:** the agent cannot permanently delete documents or
   delete accounts. The only exposed writes are archive, restore, field
   correction, re-extraction, and validation recheck, each behind the
-  confirmation endpoint.
+  confirmation endpoint. Correction values are parsed through the same
+  Pydantic field constraints used by the document API, including finite,
+  non-negative amounts and ISO date parsing. The confirmation card shows the
+  stored value and proposed value before the user submits the single confirm
+  action. If the stored field changes after proposal, confirmation fails instead
+  of overwriting the newer value.
 - **Resource abuse:** request length/history limits, six model iterations,
   output-token and wall-clock caps, per-user chat/action rate limits, one
   pending write proposal per chat, a three-action outstanding cap, and one
   concurrent chat per user bound the agent's work. The frontend applies a
-  matching local chat limit for usability; backend limits remain authoritative.
+  matching 20-per-10-minute local chat limit for usability and keeps the
+  conversation mounted while navigating between app pages; backend limits
+  remain authoritative.
 - **Logging:** logs include tool names, durations, and user identifiers only.
   They never include user messages, document content, model output, exception
   details, or credentials.

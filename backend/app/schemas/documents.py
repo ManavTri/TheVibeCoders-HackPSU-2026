@@ -107,7 +107,7 @@ class DocumentRecord(FinancialDocument):
 
 
 class DocumentCorrection(BaseModel):
-    amount: Decimal | None = Field(default=None, ge=0)
+    amount: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
     currency: str = Field(default="USD", min_length=3, max_length=3, pattern=r"^[A-Z]{3}$")
     term: str | None = None
     deadline: Date | None = None

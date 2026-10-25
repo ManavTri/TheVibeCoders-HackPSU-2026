@@ -5,7 +5,7 @@ import {
   sendChatMessage,
 } from '../lib/backend'
 
-const CHAT_LIMIT = 5
+const CHAT_LIMIT = 20
 const CHAT_WINDOW_MS = 10 * 60 * 1000
 const HELLO = 'Hi! I can help compare your uploaded financial documents, explain findings, and prepare edits or a fresh check. Any change or recheck requires your confirmation.'
 
@@ -14,6 +14,10 @@ function currentTimeMs() {
 }
 
 function actionDetails(action) {
+  if (action.preview) {
+    const { field, current, proposed } = action.preview
+    return `${field.replaceAll('_', ' ')}: ${current ?? 'not set'} → ${proposed ?? 'not set'}`
+  }
   const { field, value } = action.args || {}
   if (!field) return null
   return `${field.replaceAll('_', ' ')} → ${value ?? 'blank'}`
@@ -44,7 +48,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
     const now = currentTimeMs()
     requestTimes.current = requestTimes.current.filter((time) => now - time < CHAT_WINDOW_MS)
     if (requestTimes.current.length >= CHAT_LIMIT) {
-      setError('This device has reached its limit of 5 chat requests per 10 minutes. Please wait before trying again.')
+      setError('This device has reached its limit of 20 chat requests per 10 minutes. Please wait before trying again.')
       return
     }
     requestTimes.current.push(now)
@@ -60,7 +64,10 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
     setNotice('')
     try {
       const response = await sendChatMessage(nextMessage, history)
-      setMessages((current) => [...current, { role: 'assistant', content: response.reply }])
+      setMessages((current) => [
+        ...current,
+        { role: 'assistant', content: response.reply, sources: response.sources || [] },
+      ])
       setPendingActions((current) => [...current, ...(response.pendingActions || [])])
       setSuggestions(response.suggestions || [])
     } catch (cause) {
@@ -71,12 +78,6 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
   }
 
   async function confirmAction(action) {
-    const details = actionDetails(action)
-    const confirmationText = details
-      ? `${action.summary}\n\nRequested change: ${details}\n\nApply this change now?`
-      : `${action.summary}\n\nThis will run a new validation check. Continue?`
-    if (!window.confirm(confirmationText)) return
-
     setBusyActionId(action.id)
     setError('')
     setNotice('')
@@ -119,7 +120,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
           <p className="mt-1 text-xs text-slate-500">Document-grounded help · no saved chat history</p>
         </div>
         <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs text-amber-900">
-          5 requests / 10 minutes
+          20 requests / 10 minutes
         </span>
       </header>
 
@@ -142,6 +143,11 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
               {turn.role === 'user' ? 'You' : 'EduCash'}
             </p>
             {turn.content}
+            {turn.sources?.length > 0 && (
+              <p className="mt-2 border-t border-slate-200 pt-2 text-xs text-slate-500">
+                Sources: {turn.sources.map((source) => source.filename).join(', ')}
+              </p>
+            )}
           </article>
         ))}
         {busy && <p className="text-sm text-slate-500" role="status">Checking your documents…</p>}
@@ -154,7 +160,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
               <p className="mt-2 break-words text-sm text-slate-700">{actionDetails(action)}</p>
             )}
             <p className="mt-2 text-xs leading-5 text-slate-600">
-              The assistant cannot make this change until you confirm. Review the details before continuing.
+              Nothing has changed yet. Confirm only if the proposed change is correct.
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
@@ -163,7 +169,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
                 onClick={() => void confirmAction(action)}
                 className="rounded-lg bg-emerald-800 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
               >
-                {busyActionId === action.id ? 'Working…' : 'Review and confirm'}
+                {busyActionId === action.id ? 'Working…' : '                Confirm this action'}
               </button>
               <button
                 type="button"

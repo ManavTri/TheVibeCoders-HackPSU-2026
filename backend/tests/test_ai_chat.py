@@ -1,5 +1,7 @@
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from threading import Event
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -225,6 +227,12 @@ def test_confirmed_field_correction_is_validated_and_applied(client, monkeypatch
     install_fake(client, fake, monkeypatch)
     proposed = client.post("/api/ai/chat", json={"message": "Correct the term."}).json()
     pending_id = proposed["pendingActions"][0]["id"]
+    pending_action = proposed["pendingActions"][0]
+    assert pending_action["preview"] == {
+        "field": "term",
+        "current": "Fall 2026",
+        "proposed": "Spring 2027",
+    }
 
     confirmed = client.post(f"/api/ai/actions/{pending_id}/confirm")
 
@@ -232,6 +240,77 @@ def test_confirmed_field_correction_is_validated_and_applied(client, monkeypatch
     refreshed = client.get(f"/api/documents/{document['id']}").json()
     assert refreshed["term"] == "Spring 2027"
     assert refreshed["user_edited_fields"] == ["document_type", "term"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("amount", "Infinity"),
+        ("amount", "not-a-number"),
+        ("deadline", "not-a-date"),
+        ("required_credits", "2.5"),
+        ("document_type", "unrecognized_type"),
+    ],
+)
+def test_confirm_rejects_invalid_correction_values(client, field, value) -> None:
+    document = upload(client)
+    action = agent._make_pending_action(
+        "local-demo",
+        "correct_document_field",
+        {"id": document["id"], "field": field, "value": value},
+    )
+
+    response = client.post(f"/api/ai/actions/{action.id}/confirm")
+
+    assert response.status_code == 409
+    assert client.get(f"/api/documents/{document['id']}").json()[field] == document[field]
+    with pytest.raises(agent.ActionNotFoundError):
+        agent.confirm_action("local-demo", action.id)
+
+
+def test_confirm_rejects_correction_if_field_changed_since_proposal(client) -> None:
+    document = upload(client)
+    action = agent._make_pending_action(
+        "local-demo",
+        "correct_document_field",
+        {"id": document["id"], "field": "term", "value": "Spring 2027"},
+    )
+    client.patch(
+        f"/api/documents/{document['id']}",
+        json={"term": "Summer 2027"},
+    )
+
+    response = client.post(f"/api/ai/actions/{action.id}/confirm")
+
+    assert response.status_code == 409
+    assert client.get(f"/api/documents/{document['id']}").json()["term"] == "Summer 2027"
+
+
+def test_pending_action_confirmation_is_atomic(client, monkeypatch) -> None:
+    document = upload(client)
+    action = agent._make_pending_action(
+        "local-demo", "archive_document", {"id": document["id"]}
+    )
+    execution_started = Event()
+    allow_execution_to_finish = Event()
+    executions = []
+
+    def delayed_execute(user_id, pending_action):
+        executions.append((user_id, pending_action.id))
+        execution_started.set()
+        assert allow_execution_to_finish.wait(timeout=2)
+        return {"id": document["id"], "filename": document["filename"]}
+
+    monkeypatch.setattr(agent, "_execute_pending", delayed_execute)
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        first = pool.submit(agent.confirm_action, "local-demo", action.id)
+        assert execution_started.wait(timeout=2)
+        with pytest.raises(agent.ActionNotFoundError):
+            agent.confirm_action("local-demo", action.id)
+        allow_execution_to_finish.set()
+        assert first.result(timeout=2)["id"] == document["id"]
+
+    assert executions == [("local-demo", action.id)]
 
 
 def test_confirmed_reextract_retains_user_corrected_fields(client) -> None:
@@ -306,16 +385,18 @@ def test_iteration_cap_limits_model_calls(client, monkeypatch) -> None:
     assert len(fake.models.calls) == agent.MAX_ITERATIONS
 
 
-def test_rate_limit_rejects_request_six(client, monkeypatch) -> None:
-    fake = FakeClient([text_response("Please add a document first.") for _ in range(6)])
+def test_rate_limit_rejects_request_21(client, monkeypatch) -> None:
+    fake = FakeClient(
+        [text_response("Please add a document first.") for _ in range(21)]
+    )
     install_fake(client, fake, monkeypatch)
 
     responses = [
         client.post("/api/ai/chat", json={"message": "What can you help with?"})
-        for _ in range(6)
+        for _ in range(21)
     ]
 
-    assert all(response.status_code == 200 for response in responses[:5])
+    assert all(response.status_code == 200 for response in responses[:20])
     assert responses[-1].status_code == 429
     assert int(responses[-1].headers["Retry-After"]) > 0
 

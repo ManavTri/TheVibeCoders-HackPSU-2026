@@ -30,10 +30,10 @@ logger = logging.getLogger(__name__)
 MAX_ITERATIONS = 6
 MAX_CHAT_SECONDS = 40
 MAX_OUTPUT_TOKENS = 1024
-RATE_LIMIT_CAPACITY = 5
-RATE_LIMIT_REFILL_PER_SECOND = 1 / 120
-ACTION_RATE_LIMIT_CAPACITY = 5
-ACTION_RATE_LIMIT_REFILL_PER_SECOND = 1 / 120
+RATE_LIMIT_CAPACITY = 20
+RATE_LIMIT_REFILL_PER_SECOND = 1 / 30
+ACTION_RATE_LIMIT_CAPACITY = 10
+ACTION_RATE_LIMIT_REFILL_PER_SECOND = 1 / 60
 MAX_PENDING_ACTIONS_PER_USER = 3
 ACTION_TTL = timedelta(minutes=10)
 MAX_DOCUMENT_RESULTS = 50
@@ -166,6 +166,7 @@ class PendingActionRecord:
     tool: str
     args: dict[str, Any]
     expires_at: datetime
+    preview: dict[str, Any] | None = None
 
 
 @dataclass
@@ -416,7 +417,8 @@ def _make_pending_action(
         if len(eligible) < 2:
             raise ValueError("At least two active extracted documents are required to recheck.")
         record = None
-        summary = f"Recheck {len(eligible)} active documents"
+        summary = "Recheck active extracted documents"
+        preview = None
     else:
         record = _owned_document(user_id, normalized_args.get("id"))
         if sources is not None:
@@ -427,7 +429,15 @@ def _make_pending_action(
             "reextract_document": f"Re-extract {record['filename']}",
         }.get(tool_name)
         if tool_name == "correct_document_field":
-            summary = f"Correct {normalized_args['field']} on {record['filename']}"
+            field = normalized_args["field"]
+            summary = f"Correct {field.replace('_', ' ')} on {record['filename']}"
+            preview = {
+                "field": field,
+                "current": record.get(field),
+                "proposed": normalized_args["value"],
+            }
+        else:
+            preview = None
     action_id = str(uuid4())
     if summary is None:
         raise ValueError("Unsupported pending action.")
@@ -437,6 +447,7 @@ def _make_pending_action(
         tool=tool_name,
         args=normalized_args,
         expires_at=now + ACTION_TTL,
+        preview=preview,
     )
     with _state_lock:
         for expired_id in [
@@ -452,7 +463,13 @@ def _make_pending_action(
         if outstanding >= MAX_PENDING_ACTIONS_PER_USER:
             raise ValueError("Too many pending actions. Confirm or cancel one first.")
         _pending_actions[action_id] = pending
-    return PendingAction(id=action_id, tool=tool_name, summary=summary, args=normalized_args)
+    return PendingAction(
+        id=action_id,
+        tool=tool_name,
+        summary=summary,
+        args=normalized_args,
+        preview=preview,
+    )
 
 
 def _execute_read_tool(
@@ -888,8 +905,16 @@ def _execute_pending(user_id: str, action: PendingActionRecord) -> dict[str, Any
     elif action.tool == "restore_document":
         record = repositories.restore_document(user_id, document_id)
     elif action.tool == "correct_document_field":
+        record = repositories.get_document(user_id, document_id)
+        field = args["field"]
+        if record is None:
+            raise ActionNotFoundError()
+        if action.preview and record.get(field) != action.preview.get("current"):
+            raise ValueError(
+                "This field changed after the action was proposed. Ask the assistant to prepare it again."
+            )
         correction = DocumentCorrection.model_validate(
-            {args["field"]: args["value"]}
+            {field: args["value"]}
         )
         record = repositories.correct_document(
             user_id, document_id, correction.model_dump(exclude_unset=True)

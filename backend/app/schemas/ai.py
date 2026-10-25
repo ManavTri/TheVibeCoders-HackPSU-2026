@@ -28,6 +28,7 @@ class PendingAction(BaseModel):
     tool: str
     summary: str
     args: dict[str, Any]
+    preview: dict[str, Any] | None = None
 
 
 class ChatResponse(BaseModel):

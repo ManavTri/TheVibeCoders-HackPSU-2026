@@ -538,19 +538,7 @@ function App() {
 
   function renderOtherPages() {
     if (activePage === 'AI Chat') {
-      return (
-        <div className="space-y-5">
-          <div>
-            <p className="text-sm uppercase tracking-[0.25em] text-[#5f6b76]">Ask about your finances</p>
-            <h2 className="mt-2 text-3xl font-semibold text-[#1b2430]">AI financial assistant</h2>
-            <p className="mt-2 text-sm text-slate-500">Get document-grounded answers, prepare corrections, or request a fresh validation.</p>
-          </div>
-          <FinancialChat
-            onDocumentsChanged={reloadData}
-            onRecheck={refreshFromChatRecheck}
-          />
-        </div>
-      )
+      return <div><p className="text-sm uppercase tracking-[0.25em] text-[#5f6b76]">Ask about your finances</p><h2 className="mt-2 text-3xl font-semibold text-[#1b2430]">AI financial assistant</h2><p className="mt-2 text-sm text-slate-500">Get document-grounded answers, prepare corrections, or request a fresh validation.</p></div>
     }
     return <SectionCard title="Account settings" subtitle="Supabase authentication and account status">
       <div className="rounded-xl border border-slate-800 bg-[#0f141a] p-4"><p className="text-xs uppercase tracking-wider text-slate-400">Signed in as</p><p className="mt-2 text-white">{session?.user?.email || 'Local development identity'}</p></div>
@@ -590,7 +578,16 @@ function App() {
             </SectionCard>
             : supabase && !session
             ? <AuthPanel />
-            : pageContent}
+            : <>
+              {pageContent}
+              <div hidden={activePage !== 'AI Chat'} className="mt-5">
+                <FinancialChat
+                  key={session?.user?.id || 'local-demo'}
+                  onDocumentsChanged={reloadData}
+                  onRecheck={refreshFromChatRecheck}
+                />
+              </div>
+            </>}
           <footer className="mt-10 border-t border-slate-300 pt-4 text-xs text-slate-500">For planning support only—not financial advice. Confirm amounts, deadlines, and eligibility with your school or provider.</footer>
         </div>
       </main>
