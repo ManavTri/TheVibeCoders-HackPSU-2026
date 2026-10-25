@@ -1,0 +1,388 @@
+"""The only module allowed to access Supabase Postgres or Storage."""
+
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import Any
+from uuid import uuid4
+
+from app.core.config import get_settings
+from app.db.supabase import Client, get_supabase_client
+from app.schemas.documents import DocumentStatus, DocumentType, FinancialDocument
+from app.schemas.validation import Finding, ValidationReport
+
+_documents: dict[str, dict[str, Any]] = {}
+_document_files: dict[str, bytes] = {}
+_runs: dict[str, ValidationReport] = {}
+
+
+def _client() -> Client | None:
+    return get_supabase_client()
+
+
+def _first(response: Any) -> dict[str, Any] | None:
+    rows = response.data
+    return rows[0] if rows else None
+
+
+def _document_fields(document: FinancialDocument) -> dict[str, Any]:
+    return {
+        "amount": str(document.amount) if document.amount is not None else None,
+        "currency": document.currency,
+        "term": document.term,
+        "deadline": document.deadline.isoformat() if document.deadline else None,
+        "required_credits": document.required_credits,
+        "document_type": document.document_type.value,
+    }
+
+
+def _record(row: dict[str, Any]) -> dict[str, Any]:
+    extracted = row.get("extracted_json") or {}
+    return {
+        "id": row["id"],
+        "user_id": row["user_id"],
+        "filename": row["filename"],
+        "document_type": extracted.get("document_type", row["type"]),
+        "amount": extracted.get("amount"),
+        "currency": extracted.get("currency", "USD"),
+        "term": extracted.get("term"),
+        "deadline": extracted.get("deadline"),
+        "required_credits": extracted.get("required_credits"),
+        "storage_path": row["storage_path"],
+        "status": row["status"],
+        "created_at": row["created_at"],
+        "extraction_error": extracted.get("extraction_error"),
+        "extracted_text": "",
+    }
+
+
+def create_document(user_id: str, filename: str, document_type: DocumentType, content: bytes) -> dict[str, Any]:
+    document_id = str(uuid4())
+    storage_path = f"{user_id}/{document_id}.pdf"
+    settings = get_settings()
+    client = _client()
+    if client is None:
+        row = {
+            "id": document_id,
+            "user_id": user_id,
+            "filename": filename,
+            "type": document_type.value,
+            "storage_path": storage_path,
+            "status": DocumentStatus.UPLOADED.value,
+            "extracted_json": {"document_type": document_type.value},
+            "created_at": datetime.now(UTC).isoformat(),
+        }
+        _documents[document_id] = row
+        _document_files[document_id] = content
+        return _record(row)
+
+    bucket = client.storage.from_(settings.supabase_storage_bucket)
+    bucket.upload(storage_path, content, {"content-type": "application/pdf", "upsert": "false"})
+    try:
+        response = (
+            client.table("documents")
+            .insert(
+                {
+                    "id": document_id,
+                    "user_id": user_id,
+                    "type": document_type.value,
+                    "filename": filename,
+                    "storage_path": storage_path,
+                    "status": DocumentStatus.UPLOADED.value,
+                    "extracted_json": {"document_type": document_type.value},
+                }
+            )
+            .select("*")
+            .execute()
+        )
+    except Exception:
+        bucket.remove([storage_path])
+        raise
+    row = _first(response)
+    if row is None:
+        bucket.remove([storage_path])
+        raise RuntimeError("Supabase did not return the newly inserted document.")
+    return _record(row)
+
+
+def get_document(user_id: str, document_id: str) -> dict[str, Any] | None:
+    client = _client()
+    if client is None:
+        row = _documents.get(document_id)
+        return _record(row) if row and row["user_id"] == user_id else None
+    response = (
+        client.table("documents")
+        .select("*")
+        .eq("id", document_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    row = _first(response)
+    return _record(row) if row else None
+
+
+def list_documents(user_id: str) -> list[dict[str, Any]]:
+    client = _client()
+    if client is None:
+        rows = [row for row in _documents.values() if row["user_id"] == user_id]
+        return [_record(row) for row in sorted(rows, key=lambda item: item["created_at"], reverse=True)]
+    response = (
+        client.table("documents")
+        .select("*")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .execute()
+    )
+    return [_record(row) for row in response.data]
+
+
+def update_document(
+    user_id: str,
+    document_id: str,
+    extracted: FinancialDocument,
+    status: DocumentStatus,
+    extraction_error: str | None = None,
+) -> dict[str, Any] | None:
+    client = _client()
+    extracted_json = _document_fields(extracted)
+    if extraction_error:
+        extracted_json["extraction_error"] = extraction_error
+    if client is None:
+        row = _documents.get(document_id)
+        if row is None or row["user_id"] != user_id:
+            return None
+        row["status"] = status.value
+        row["extracted_json"] = extracted_json
+        return _record(row)
+    response = (
+        client.table("documents")
+        .update({"status": status.value, "extracted_json": extracted_json})
+        .eq("id", document_id)
+        .eq("user_id", user_id)
+        .select("*")
+        .execute()
+    )
+    row = _first(response)
+    return _record(row) if row else None
+
+
+def correct_document(
+    user_id: str, document_id: str, corrections: dict[str, Any]
+) -> dict[str, Any] | None:
+    existing = get_document(user_id, document_id)
+    if existing is None:
+        return None
+    document = FinancialDocument.model_validate(existing)
+    updated = document.model_copy(update=corrections)
+    client = _client()
+    extracted_json = _document_fields(updated)
+    if client is None:
+        row = _documents[document_id]
+        row["type"] = updated.document_type.value
+        row["extracted_json"] = extracted_json
+        row["status"] = DocumentStatus.EXTRACTED.value
+        return _record(row)
+    response = (
+        client.table("documents")
+        .update(
+            {
+                "type": updated.document_type.value,
+                "status": DocumentStatus.EXTRACTED.value,
+                "extracted_json": extracted_json,
+            }
+        )
+        .eq("id", document_id)
+        .eq("user_id", user_id)
+        .select("*")
+        .execute()
+    )
+    row = _first(response)
+    return _record(row) if row else None
+
+
+def download_document(user_id: str, document_id: str) -> bytes | None:
+    record = get_document(user_id, document_id)
+    if record is None:
+        return None
+    if _client() is None:
+        return _document_files.get(document_id)
+    settings = get_settings()
+    return _client().storage.from_(settings.supabase_storage_bucket).download(record["storage_path"])
+
+
+def delete_document(user_id: str, document_id: str) -> bool:
+    record = get_document(user_id, document_id)
+    if record is None:
+        return False
+    client = _client()
+    if client is None:
+        _documents.pop(document_id, None)
+        _document_files.pop(document_id, None)
+        for run_id, report in list(_runs.items()):
+            if any(document.id == document_id for document in report.documents):
+                _runs.pop(run_id)
+        return True
+    settings = get_settings()
+    client.storage.from_(settings.supabase_storage_bucket).remove([record["storage_path"]])
+    related_runs = (
+        client.table("validation_runs")
+        .select("id")
+        .eq("user_id", user_id)
+        .contains("document_ids", [document_id])
+        .execute()
+        .data
+    )
+    if related_runs:
+        client.table("validation_runs").delete().eq("user_id", user_id).in_(
+            "id", [run["id"] for run in related_runs]
+        ).execute()
+    client.table("documents").delete().eq("id", document_id).eq("user_id", user_id).execute()
+    return True
+
+
+def create_validation_run(
+    user_id: str, documents: list[FinancialDocument], findings: list[Finding]
+) -> ValidationReport:
+    run_id = str(uuid4())
+    created_at = datetime.now(UTC)
+    summaries = [
+        {
+            "id": doc.id,
+            "filename": doc.filename,
+            "document_type": doc.document_type.value,
+            "amount": doc.amount,
+            "currency": doc.currency,
+            "term": doc.term,
+            "deadline": doc.deadline,
+            "required_credits": doc.required_credits,
+        }
+        for doc in documents
+    ]
+    summary = (
+        f"{len(findings)} potential {'inconsistency' if len(findings) == 1 else 'inconsistencies'} found."
+        if findings
+        else "No potential inconsistencies detected."
+    )
+    report = ValidationReport(
+        id=run_id,
+        created_at=created_at,
+        documents=summaries,
+        findings=findings,
+        summary=summary,
+    )
+    client = _client()
+    if client is None:
+        _runs[run_id] = report
+        return report
+    client.table("validation_runs").insert(
+        {
+            "id": run_id,
+            "user_id": user_id,
+            "created_at": created_at.isoformat(),
+            "document_ids": [doc.id for doc in documents],
+        }
+    ).execute()
+    if findings:
+        try:
+            client.table("findings").insert(
+                [
+                    {
+                        "run_id": run_id,
+                        "rule_id": finding.rule_id,
+                        "severity": finding.severity.value,
+                        "title": finding.title,
+                        "explanation": finding.explanation,
+                        "document_ids": finding.document_ids,
+                        "fields": {
+                            key: str(value) if isinstance(value, Decimal) else value
+                            for key, value in finding.fields.items()
+                        },
+                        "suggested_action": finding.suggested_action,
+                    }
+                    for finding in findings
+                ]
+            ).execute()
+        except Exception:
+            client.table("validation_runs").delete().eq("id", run_id).eq("user_id", user_id).execute()
+            raise
+    return report
+
+
+def get_validation_run(user_id: str, run_id: str) -> ValidationReport | None:
+    client = _client()
+    if client is None:
+        report = _runs.get(run_id)
+        return report if report and all(_documents.get(doc.id, {}).get("user_id") == user_id for doc in report.documents) else None
+
+    run = _first(
+        client.table("validation_runs")
+        .select("*")
+        .eq("id", run_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    )
+    if run is None:
+        return None
+    document_rows = (
+        client.table("documents")
+        .select("*")
+        .eq("user_id", user_id)
+        .in_("id", run["document_ids"])
+        .execute()
+        .data
+    )
+    documents_by_id = {row["id"]: _record(row) for row in document_rows}
+    finding_rows = (
+        client.table("findings")
+        .select("*")
+        .eq("run_id", run_id)
+        .order("created_at")
+        .execute()
+        .data
+    )
+    return ValidationReport(
+        id=run["id"],
+        created_at=run["created_at"],
+        documents=[
+            {
+                key: row[key]
+                for key in (
+                    "id",
+                    "filename",
+                    "document_type",
+                    "amount",
+                    "currency",
+                    "term",
+                    "deadline",
+                    "required_credits",
+                )
+            }
+            for document_id in run["document_ids"]
+            if (row := documents_by_id.get(document_id)) is not None
+        ],
+        findings=[
+            {
+                "rule_id": row["rule_id"],
+                "severity": row["severity"],
+                "title": row["title"],
+                "explanation": row["explanation"],
+                "document_ids": row["document_ids"],
+                "fields": row["fields"],
+                "suggested_action": row["suggested_action"],
+            }
+            for row in finding_rows
+        ],
+        summary=(
+            f"{len(finding_rows)} potential {'inconsistency' if len(finding_rows) == 1 else 'inconsistencies'} found."
+            if finding_rows
+            else "No potential inconsistencies detected."
+        ),
+    )
+
+
+def clear_repositories() -> None:
+    """Clear local demo state for isolated tests."""
+    _documents.clear()
+    _document_files.clear()
+    _runs.clear()
