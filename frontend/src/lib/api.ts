@@ -1,6 +1,10 @@
 import { supabase } from './supabase'
 import type { DocumentCorrection, DocumentRecord, DocumentType, Insights, ValidationReport } from '../types/api'
 
+const configuredUrl = import.meta.env.VITE_API_URL as string | undefined
+if (!configuredUrl && import.meta.env.PROD) {
+  throw new Error('VITE_API_URL is not set. Set it in the Vercel project settings and redeploy.')
+}
 const apiUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
