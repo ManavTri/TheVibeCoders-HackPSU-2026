@@ -13,6 +13,8 @@ from app.services.validation.rules.base import ValidationConfig
 def isolate_backend_settings(monkeypatch):
     for name, value in {
         "REQUIRE_AUTH": "false",
+        "AUTH0_DOMAIN": "",
+        "AUTH0_AUDIENCE": "",
         "SUPABASE_URL": "",
         "SUPABASE_SERVICE_KEY": "",
         "SUPABASE_JWT_SECRET": "",
@@ -37,6 +39,8 @@ def isolate_backend_settings(monkeypatch):
 def client(monkeypatch) -> TestClient:
     for name, value in {
         "REQUIRE_AUTH": "false",
+        "AUTH0_DOMAIN": "",
+        "AUTH0_AUDIENCE": "",
         "SUPABASE_URL": "",
         "SUPABASE_SERVICE_KEY": "",
         "SUPABASE_JWT_SECRET": "",

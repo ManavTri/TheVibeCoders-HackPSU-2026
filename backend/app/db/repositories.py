@@ -181,6 +181,10 @@ def create_document(
     if existing:
         raise DuplicateDocumentError(existing)
     bucket = client.storage.from_(settings.supabase_storage_bucket)
+    # Auth0 subject identifiers are not UUIDs, while the Supabase schema keeps
+    # user_id as a UUID foreign key. current_user_id supplies a deterministic
+    # UUID for Auth0 identities; create the corresponding profile on demand.
+    client.table("profiles").upsert({"id": user_id}, on_conflict="id").execute()
     bucket.upload(storage_path, content, {"content-type": "application/pdf", "upsert": "false"})
     try:
         response = (

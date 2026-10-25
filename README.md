@@ -1,17 +1,17 @@
-# EduCash — Student Financial Cross-Check
+# Muni — Student Financial Cross-Check
 
 **Manage scholarships, tuition bills, and study-abroad costs in one place. Catch details worth double-checking and leave with a clearer next step.**
 
-ClearLedger extracts labeled fields from student financial PDFs, compares them with explainable validation rules, and helps students prepare questions for their school or award provider. Findings are prompts to verify—not financial advice or eligibility decisions.
+Muni extracts labeled fields from student financial PDFs, compares them with explainable validation rules, and helps students prepare questions for their school or award provider. Findings are prompts to verify—not financial advice or eligibility decisions.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
   Student --> Web[Vercel: React + Vite]
-  Web -->|Supabase access token + PDF| API[Render: FastAPI]
-  Web --> Auth[Supabase Auth]
-  API --> Verify[Verify Supabase JWT]
+  Web -->|Auth0 access token + PDF| API[Render: FastAPI]
+  Web --> Auth[Auth0]
+  API --> Verify[Verify Auth0 JWT]
   Verify --> Repo[Repository boundary]
   Repo --> DB[(Supabase Postgres)]
   Repo --> Storage[Private Supabase Storage]
@@ -21,7 +21,7 @@ flowchart LR
   API --> Web
 ```
 
-The React app authenticates with Supabase Auth. The API verifies the access token, uses the verified user ID to scope every repository operation, and accesses Postgres/private Storage with a server-only service key. **Every database and object-storage operation belongs in [`backend/app/db/repositories.py`](backend/app/db/repositories.py).**
+The React app prefers Auth0 and sends its access token to the FastAPI API. If Auth0 is not fully configured, it falls back to Supabase Auth. The API selects the verifier from the token issuer, uses a deterministic UUID mapping for Auth0 subjects to preserve the existing Supabase UUID foreign keys, and accesses Postgres/private Storage with a server-only service key. Supabase is used for persistence in every deployment and can also provide fallback authentication. **Every database and object-storage operation belongs in [`backend/app/db/repositories.py`](backend/app/db/repositories.py).**
 
 The frontend-to-backend feature mapping and pending API work are tracked in [`docs/api-gaps.md`](docs/api-gaps.md).
 
@@ -29,7 +29,7 @@ The frontend-to-backend feature mapping and pending API work are tracked in [`do
 
 - Backend: Render blueprint in [`render.yaml`](render.yaml).
 - Frontend: Vercel project rooted at `frontend/`, with SPA rewrites in [`frontend/vercel.json`](frontend/vercel.json).
-- Database, Auth, and private document storage: apply the Supabase migrations in [`backend/supabase/migrations/`](backend/supabase/migrations/) in timestamp order.
+- Database and private document storage: apply the Supabase migrations in [`backend/supabase/migrations/`](backend/supabase/migrations/) in timestamp order. Configure Auth0 separately for authentication.
 - Step-by-step provider setup, secrets, and smoke checks: [deployment guide](docs/deployment.md).
 - **Live demo:** not published yet. Deploy the Render Blueprint and Vercel project using the deployment guide, then add their public URLs here.
 
@@ -37,7 +37,7 @@ Provider accounts and secrets are not available in this workspace, so the deploy
 
 ## Local development
 
-Requirements: Python 3.11+, Node.js 22+ and npm installed inside Ubuntu/WSL. Keep the checkout and `node_modules` on the Ubuntu filesystem (for example, `~/Code/TheVibeCoders-HackPSU-2026`), not under `/mnt/c`; Windows-mounted folders can lock Windows-native packages and make even Linux `npm ci` fail. The Make targets reject Windows Node/npm inherited through WSL's PATH. Local API mode uses in-memory repositories if Supabase credentials are absent. For authenticated local development, configure a Supabase project and copy the app-specific env examples.
+Requirements: Python 3.11+, Node.js 22+ and npm installed inside Ubuntu/WSL. Keep the checkout and `node_modules` on the Ubuntu filesystem (for example, `~/Code/TheVibeCoders-HackPSU-2026`), not under `/mnt/c`; Windows-mounted folders can lock Windows-native packages and make even Linux `npm ci` fail. The Make targets reject Windows Node/npm inherited through WSL's PATH. Local API mode uses in-memory repositories if Supabase credentials are absent. For authenticated local development, configure an Auth0 SPA application/API and copy the app-specific env examples.
 
 ```bash
 # Terminal 1 — backend (WSL/Linux)
@@ -59,7 +59,7 @@ again after dependency changes because `npm ci` removes and recreates
 
 Open `http://localhost:5173`; backend health is at `http://localhost:8000/health`, and API docs are at `http://localhost:8000/docs`.
 
-For local Supabase-backed development, apply all migrations in timestamp order to your Supabase project, copy `backend/.env.example` to `backend/.env`, set its Supabase values, and set `REQUIRE_AUTH=true`. Set `LLM_API_KEY` and `LLM_MODEL` on the backend only if you want Gemini extraction; no model is selected by default. Copy `frontend/.env.example` to `frontend/.env.local` and set the Supabase URL and anon/publishable key. Never put service-role or LLM secrets in frontend variables.
+For local Supabase-backed development, apply all migrations in timestamp order to your Supabase project, copy `backend/.env.example` to `backend/.env`, set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`, and set `REQUIRE_AUTH=true`. Set `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` on the backend. Copy `frontend/.env.example` to `frontend/.env.local` and set `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE`, and `VITE_API_URL`. Never put service-role, Auth0 client secrets, or LLM secrets in frontend variables.
 
 ## API
 
@@ -106,9 +106,9 @@ Use only PDFs under `sample_docs/`. Scenario 1 deliberately puts an award and bi
 
 ## Data, safety, and limitations
 
-- Supabase is the production persistence path; local development falls back to in-memory repositories only when backend Supabase credentials are absent.
+- Supabase Postgres and private Storage are the production persistence path; local development falls back to in-memory repositories only when backend Supabase credentials are absent.
 - Uploaded PDFs are stored in a private bucket, scoped under the authenticated user's ID. The backend checks ownership and deletes the Storage object as part of document deletion.
-- The API uses a server-only Supabase service key; Supabase Auth access tokens are verified server-side. Production mode refuses to start without auth and Supabase configuration.
+- Auth0 is the preferred authentication provider. The frontend obtains Auth0 access tokens when configured, otherwise it uses Supabase Auth; the API verifies the selected token issuer, audience, and signature server-side. The Supabase service key is used for persistence, and production requires at least one configured authentication provider.
 - When `LLM_API_KEY` and `LLM_MODEL` are configured, the backend sends the PDF bytes to Gemini for one structured classification-and-extraction call. Gemini failures, timeouts, rate limits, server errors, and invalid responses fall back to the local PDF text parser. Without an API key/model, the parser is used directly. Image-only PDFs fail extraction; OCR is not implemented.
 - The term-aware ledger uses explicitly extracted line items and schedule details. Amount-only legacy documents are supported with low confidence; unknown terms are not silently assigned to a term, and unitemized multi-term figures are kept in `annual_unallocated`.
 - Gemini receives PDF bytes separately from its instructions; PDF text is treated as untrusted data. Prompts prohibit extracting SSNs, bank/card numbers, government IDs, student IDs, and home addresses. The application does not store extracted PDF text or log the model output. Review Google's API data-handling terms before sending real financial documents.

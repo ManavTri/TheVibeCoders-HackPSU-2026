@@ -14,6 +14,9 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if settings.app_env.lower() == "production":
+        auth_provider_configured = bool(
+            settings.auth0_domain and settings.auth0_audience
+        ) or bool(settings.supabase_jwt_secret or settings.supabase_url)
         missing = [
             name
             for name, value in (
@@ -23,6 +26,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
             )
             if not value
         ]
+        if not auth_provider_configured:
+            missing.append("AUTH0_DOMAIN/AUTH0_AUDIENCE or Supabase JWT configuration")
         if not settings.allowed_origins or any(
             origin.startswith(("http://localhost", "http://127.0.0.1"))
             for origin in settings.allowed_origins
@@ -34,7 +39,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(
-    title="Student Financial Cross-Check",
+    title="Muni — Student Financial Cross-Check",
     description="Extract key fields from student financial PDFs and surface potential inconsistencies.",
     version="0.1.0",
     lifespan=lifespan,

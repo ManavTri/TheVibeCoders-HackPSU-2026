@@ -1,26 +1,40 @@
 import { createClient } from '@supabase/supabase-js'
+import { auth0Configured, getAuth0AccessToken } from './auth0'
 
 const apiUrl = (import.meta.env.VITE_API_URL || 'http://localhost:8000').replace(/\/$/, '')
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
+const supabaseConfigured = Boolean(supabaseUrl && supabaseAnonKey)
+const auth0VariablesPresent = Boolean(import.meta.env.VITE_AUTH0_DOMAIN || import.meta.env.VITE_AUTH0_CLIENT_ID || import.meta.env.VITE_AUTH0_AUDIENCE)
+const supabaseVariablesPresent = Boolean(supabaseUrl || supabaseAnonKey)
 
-export const authConfigurationIncomplete = Boolean(supabaseUrl) !== Boolean(supabaseAnonKey)
+export const preferredAuth = auth0Configured ? 'auth0' : supabaseConfigured ? 'supabase' : null
+export const authConfigurationIncomplete = (!auth0Configured && auth0VariablesPresent && !supabaseConfigured)
+  || (!supabaseConfigured && supabaseVariablesPresent && !auth0Configured)
 export const supabase = supabaseUrl && supabaseAnonKey
   ? createClient(supabaseUrl, supabaseAnonKey)
   : null
 export const remoteApiWithoutAuth = Boolean(import.meta.env.VITE_API_URL)
   && !/localhost|127\.0\.0\.1/i.test(import.meta.env.VITE_API_URL)
-  && !supabase
+  && !preferredAuth
 
 async function fetchApi(path, init) {
-  const { data, error } = supabase
-    ? await supabase.auth.getSession()
-    : { data: { session: null }, error: null }
-  if (error) throw new Error(`Unable to read the Supabase session: ${error.message}`)
+  let accessToken = null
+  if (auth0Configured) {
+    try {
+      accessToken = await getAuth0AccessToken()
+    } catch (error) {
+      throw new Error(`Unable to read the Auth0 session: ${error.message}`)
+    }
+  } else if (supabase) {
+    const { data, error } = await supabase.auth.getSession()
+    if (error) throw new Error(`Unable to read the Supabase session: ${error.message}`)
+    accessToken = data.session?.access_token
+  }
 
   const headers = new Headers(init?.headers)
-  if (data.session?.access_token) {
-    headers.set('Authorization', `Bearer ${data.session.access_token}`)
+  if (accessToken) {
+    headers.set('Authorization', `Bearer ${accessToken}`)
   }
   const response = await fetch(`${apiUrl}/api${path}`, { ...init, headers })
   if (!response.ok) {

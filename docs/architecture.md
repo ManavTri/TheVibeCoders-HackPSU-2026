@@ -3,7 +3,7 @@
 ```mermaid
 flowchart LR
   Student --> Vercel[Vercel: React + Vite]
-  Vercel --> Auth[Supabase Auth]
+  Vercel --> Auth[Auth0 preferred / Supabase fallback]
   Vercel -->|Bearer token + API request| Render[Render: FastAPI]
   Render --> Verify[Verify JWT]
   Verify --> Routes[API routes]
@@ -19,8 +19,8 @@ flowchart LR
 
 ## Trust boundaries
 
-- Supabase Auth issues user sessions. The API validates the Supabase HS256 JWT signature, audience, and subject before handling protected routes.
-- The Supabase service key is backend-only. The API scopes document and run operations by the verified JWT `sub`; frontend users never receive the service key.
+- Auth0 issues user sessions when configured; otherwise Supabase Auth does. The API validates the selected JWT signature, audience, issuer, and subject before handling protected routes.
+- Supabase is always the persistence layer and can also provide fallback authentication. The Supabase service key is backend-only. The API scopes Auth0-backed operations by a deterministic UUID derived from the verified Auth0 `sub`; frontend users never receive the service key.
 - All Postgres and Storage calls are in `backend/app/db/repositories.py`. `backend/app/db/supabase.py` only constructs the shared service client.
 - The Storage bucket is private and policies scope direct user access to a first path segment equal to `auth.uid()`. The backend stores objects at `{user_id}/{document_id}.pdf`.
 - Postgres RLS policies protect user-owned data. Backend service-role access bypasses RLS, so repository-level owner filters are also required and tested.
@@ -28,7 +28,7 @@ flowchart LR
 
 ## Request flow
 
-1. The frontend signs a student in with Supabase Auth and attaches the access token to API requests.
+1. The frontend signs a student in with Auth0 when configured, or Supabase Auth as fallback, and attaches the access token to API requests.
 2. `POST /api/documents` validates and uploads a PDF, stores document metadata, and runs one structured Gemini classification/extraction call when configured; otherwise, or on a handled Gemini failure, it uses the selectable-text parser fallback. The full envelope and legacy fields are persisted in `documents.extracted_json`.
 3. The student can correct parsed values with `PATCH /api/documents/{id}`.
 4. `POST /api/documents/{id}/reextract` repeats extraction without replacing user-edited fields.
@@ -42,4 +42,4 @@ When `LLM_API_KEY` and `LLM_MODEL` are configured, Gemini receives the PDF bytes
 
 ## Persistence modes
 
-When backend Supabase URL and service-key settings are present, repository methods use Supabase Postgres and Storage. Local development without those credentials uses in-memory state so the synthetic scenarios can run without external services; this state is intentionally non-durable. `APP_ENV=production` requires Auth and Supabase configuration and does not silently fall back.
+When backend Supabase URL and service-key settings are present, repository methods use Supabase Postgres and Storage. Auth0 domain and audience settings are preferred for API authentication; Supabase JWT settings remain supported as a fallback. Local development without Supabase credentials uses in-memory state so synthetic scenarios can run without external services; this state is intentionally non-durable. `APP_ENV=production` requires Supabase persistence and at least one authentication provider.

@@ -110,26 +110,27 @@ def current_user(
         )
         issuer = unverified_claims.get("iss", "")
 
-        if (
-            settings.auth0_domain
-            and issuer
-            == f"https://{settings.auth0_domain.removeprefix('https://').rstrip('/')}/"
-        ):
+        auth0_issuer = f"https://{settings.auth0_domain.removeprefix('https://').rstrip('/')}/" if settings.auth0_domain else ""
+        if settings.auth0_domain and settings.auth0_audience and issuer == auth0_issuer:
             claims = _decode_auth0(token, settings)
         else:
             claims = _decode_supabase(token, settings)
+
+        if settings.auth0_domain and issuer == auth0_issuer:
+            claims["auth_provider"] = "auth0"
 
         subject = claims.get("sub")
         if not isinstance(subject, str) or not subject.strip():
             raise jwt.InvalidTokenError(
                 "Token is missing a valid user subject"
             )
-        try:
-            UUID(subject)
-        except ValueError as exc:
-            raise jwt.InvalidTokenError(
-                "Token is missing a valid user subject"
-            ) from exc
+        if claims.get("auth_provider") != "auth0":
+            try:
+                UUID(subject)
+            except ValueError as exc:
+                raise jwt.InvalidTokenError(
+                    "Token is missing a valid user subject"
+                ) from exc
 
         return claims
 

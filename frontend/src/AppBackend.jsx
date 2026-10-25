@@ -15,6 +15,7 @@ import {
   getDocuments,
   getValidation,
   permanentlyDeleteDocument,
+  preferredAuth,
   remoteApiWithoutAuth,
   restoreDocument,
   softDeleteDocument,
@@ -22,6 +23,7 @@ import {
   uploadDocument,
   authConfigurationIncomplete,
 } from './lib/backend'
+import { auth0Configured, restoreAuth0Session, signInWithAuth0, signOutAuth0 } from './lib/auth0'
 
 const states = ['active', 'archived', 'deleted']
 const documentTypes = [
@@ -90,6 +92,10 @@ function AuthPanel() {
     setError('')
     setMessage('')
     try {
+      if (auth0Configured) {
+        await signInWithAuth0(mode === 'signup')
+        return
+      }
       if (mode === 'signin') {
         const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
         if (authError) throw authError
@@ -114,15 +120,16 @@ function AuthPanel() {
       <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Private student workspace</p>
       <h2 className="mt-3 text-3xl font-semibold text-white">{mode === 'signin' ? 'Welcome back' : 'Create your account'}</h2>
       <p className="mt-2 text-sm leading-6 text-slate-400">Sign in securely to manage your financial documents.</p>
+      {auth0Configured && <p className="mt-2 text-xs text-slate-500">You’ll continue to Auth0 to complete sign-in.</p>}
       <form className="mt-6 space-y-4" onSubmit={submit}>
         {mode === 'signup' && <label className="block text-sm text-slate-300">Name
-          <input className="mt-2 w-full rounded-xl border border-slate-700 bg-[#111821] px-3 py-2 text-white" value={name} onChange={(event) => setName(event.target.value)} required />
+          <input className="mt-2 w-full rounded-xl border border-slate-700 bg-[#111821] px-3 py-2 text-white" value={name} onChange={(event) => setName(event.target.value)} required={!auth0Configured} disabled={auth0Configured} />
         </label>}
         <label className="block text-sm text-slate-300">Email
-          <input className="mt-2 w-full rounded-xl border border-slate-700 bg-[#111821] px-3 py-2 text-white" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required />
+          <input className="mt-2 w-full rounded-xl border border-slate-700 bg-[#111821] px-3 py-2 text-white" type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required={!auth0Configured} disabled={auth0Configured} />
         </label>
         <label className="block text-sm text-slate-300">Password
-          <input className="mt-2 w-full rounded-xl border border-slate-700 bg-[#111821] px-3 py-2 text-white" type="password" minLength={8} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} required />
+          <input className="mt-2 w-full rounded-xl border border-slate-700 bg-[#111821] px-3 py-2 text-white" type="password" minLength={8} autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} required={!auth0Configured} disabled={auth0Configured} />
         </label>
         {error && <p className="rounded-xl bg-rose-950/50 p-3 text-sm text-rose-200" role="alert">{error}</p>}
         {message && <p className="rounded-xl bg-emerald-950/50 p-3 text-sm text-emerald-200" role="status">{message}</p>}
@@ -175,7 +182,7 @@ function DocumentRow({ document, onAction, onPreview, onEdit, busy }) {
 function App() {
   const [activePage, setActivePage] = useState('Dashboard')
   const [session, setSession] = useState(null)
-  const [authLoading, setAuthLoading] = useState(Boolean(supabase))
+  const [authLoading, setAuthLoading] = useState(Boolean(auth0Configured || supabase))
   const [documents, setDocuments] = useState({ active: [], archived: [], deleted: [] })
   const [findings, setFindings] = useState([])
   const [skippedRules, setSkippedRules] = useState(0)
@@ -195,6 +202,22 @@ function App() {
   const [correction, setCorrection] = useState(null)
 
   useEffect(() => {
+    if (auth0Configured) {
+      let active = true
+      restoreAuth0Session()
+        .then((nextSession) => {
+          if (!active) return
+          setSession(nextSession)
+          setAuthLoading(false)
+        })
+        .catch((cause) => {
+          if (active) {
+            setError(errorText(cause, 'Unable to restore your session.'))
+            setAuthLoading(false)
+          }
+        })
+      return () => { active = false }
+    }
     if (!supabase) return undefined
     let active = true
     supabase.auth.getSession()
@@ -242,7 +265,7 @@ function App() {
   }, [])
 
   useEffect(() => {
-    if (authLoading || authConfigurationIncomplete || remoteApiWithoutAuth || (supabase && !session)) return undefined
+    if (authLoading || authConfigurationIncomplete || remoteApiWithoutAuth || (preferredAuth && !session)) return undefined
     let active = true
     fetchUserData()
       .then((data) => {
@@ -440,6 +463,10 @@ function App() {
   }
 
   async function signOut() {
+    if (auth0Configured) {
+      await signOutAuth0()
+      return
+    }
     if (!supabase) return
     const { error: signOutError } = await supabase.auth.signOut()
     if (signOutError) setError(`Unable to sign out: ${signOutError.message}`)
@@ -576,14 +603,14 @@ function App() {
               {session && <button type="button" onClick={() => void signOut()} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700">Sign out</button>}
             </div>
           </header>
-          {(authConfigurationIncomplete || remoteApiWithoutAuth) && <p className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="alert">Set both VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to authenticate with the configured backend.</p>}
+          {(authConfigurationIncomplete || remoteApiWithoutAuth) && <p className="mb-5 rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900" role="alert">Configure Auth0 or Supabase authentication variables before connecting to the backend.</p>}
           {error && <div className="mb-5 flex items-start justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900" role="alert"><span>{error}</span><button type="button" onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}
           {notice && <p className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900" role="status">{notice}</p>}
           {authConfigurationIncomplete || remoteApiWithoutAuth
-            ? <SectionCard title="Frontend configuration needed" subtitle="The remote backend requires a Supabase access token">
-              <p className="text-sm leading-6 text-slate-400">Configure the frontend Supabase URL and anon key in the Vercel environment, then redeploy. Do not put the backend service key in frontend settings.</p>
+            ? <SectionCard title="Frontend configuration needed" subtitle="The remote backend requires an authentication token">
+              <p className="text-sm leading-6 text-slate-400">Configure Auth0 (preferred) or the Supabase URL and anon key in the frontend environment, then redeploy. Do not put the backend service key in frontend settings.</p>
             </SectionCard>
-            : supabase && !session
+            : preferredAuth && !session
             ? <AuthPanel />
             : <>
               {pageContent}

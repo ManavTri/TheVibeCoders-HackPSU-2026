@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: clearledger-api
+    name: muni-api
     runtime: python
     plan: free
     rootDir: backend
@@ -17,8 +17,10 @@ services:
         value: /api
       - key: MAX_UPLOAD_MB
         value: "10"
-      - key: SUPABASE_JWT_AUDIENCE
-        value: authenticated
+      - key: AUTH0_DOMAIN
+        sync: false
+      - key: AUTH0_AUDIENCE
+        sync: false
       - key: SUPABASE_STORAGE_BUCKET
         value: student-documents
       - key: CORS_ORIGINS

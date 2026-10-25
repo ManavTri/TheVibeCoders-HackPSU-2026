@@ -11,7 +11,7 @@ Use the provided synthetic PDFs only. For a local demo, leave backend Supabase s
 
 ## Script (3 minutes)
 
-**0:00–0:30 — Problem.** “Students coordinate award letters, tuition bills, and program quotes from different sources. ClearLedger puts those documents together and surfaces questions worth asking.”
+**0:00–0:30 — Problem.** “Students coordinate award letters, tuition bills, and program quotes from different sources. Muni puts those documents together and surfaces questions worth asking.”
 
 **0:30–1:00 — Upload.** Click **Check my documents** and add `sample_docs/scenario_1_mismatch/award_letter.pdf` and `tuition_bill.pdf`. Leave the optional type hints blank to show automatic classification, then click **Upload and review**. Review the Gemini-detected types and extracted fields; correct any field if needed, then click **Check these documents**.
 

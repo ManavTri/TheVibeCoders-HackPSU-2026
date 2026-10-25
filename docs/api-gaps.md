@@ -4,7 +4,7 @@ The current frontend uses the existing backend contract for PDF upload and extra
 
 | Priority | API functionality to add | Why it is not covered today | Current workaround / status |
 |---|---|---|---|
-| Medium | `GET /profiles/me` and `PATCH /profiles/me` | Sign-up collects a name in Supabase Auth metadata, but the frontend cannot retrieve or edit the `profiles` row or university. | The dashboard uses generic welcome copy. |
+| Medium | `GET /profiles/me` and `PATCH /profiles/me` | Auth0 profile metadata is not yet synchronized with the `profiles` row or university field. | The dashboard uses generic welcome copy. |
 | Medium | `GET /validations` with pagination | The API can fetch a report only when the frontend already has its run ID; it cannot list prior report history. | A newly created report is opened directly after upload or correction. |
 | Medium | `POST /documents/batch` with per-file results | The upload screen sends one request per PDF. If a later upload fails (including a duplicate), earlier successful uploads remain in the library. | The frontend reports the failed request; already-created documents remain available in the library. |
 | Medium | Add supported schemas and extraction rules for FAFSA, bank statements, and other financial records | The backend now classifies award letters, tuition bills, aid packages, study-abroad quotes, loan offers, payment plans, housing contracts, and other documents, but does not yet have dedicated FAFSA or bank-statement schemas/rules. | Upload type is optional and can be detected automatically; unsupported document content remains classified as `other`. |
