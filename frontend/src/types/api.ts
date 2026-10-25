@@ -19,6 +19,7 @@ export interface FinancialDocument {
   term: string | null
   deadline: string | null
   required_credits: number | null
+  enrollment_credits: number | null
   extraction_envelope?: Record<string, unknown> | null
   extracted_text?: string
 }
@@ -28,6 +29,7 @@ export interface DocumentRecord extends FinancialDocument {
   created_at: string
   extraction_error: string | null
   extraction_source?: 'gemini' | 'fallback' | null
+  extraction_fallback_reason?: string | null
   type_detected?: DocumentType | null
   type_confidence?: number | null
   needs_review?: boolean
@@ -36,7 +38,7 @@ export interface DocumentRecord extends FinancialDocument {
 
 export type DocumentSummary = Pick<
   FinancialDocument,
-  'id' | 'filename' | 'document_type' | 'amount' | 'currency' | 'term' | 'deadline' | 'required_credits'
+  'id' | 'filename' | 'document_type' | 'amount' | 'currency' | 'term' | 'deadline' | 'required_credits' | 'enrollment_credits'
 >
 
 export interface Finding {

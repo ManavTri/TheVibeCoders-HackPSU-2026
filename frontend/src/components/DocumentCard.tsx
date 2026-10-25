@@ -8,6 +8,7 @@ export function DocumentCard({ document }: { document: DocumentSummary }) {
       <div className="document-info">
         <span className="eyebrow">{documentTypeLabels[document.document_type]}</span>
         <strong>{document.filename}</strong>
+        {document.extraction_source && <span className="eyebrow">{document.extraction_source === 'gemini' ? 'Read by AI' : 'Basic parser (limited)'}</span>}
         <div className="document-fields">
           <span>{formatMoney(document.amount, document.currency)}</span>
           <span>{document.term || 'Term not found'}</span>

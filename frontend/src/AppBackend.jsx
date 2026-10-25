@@ -29,7 +29,12 @@ const states = ['active', 'archived', 'deleted']
 const documentTypes = [
   ['award_letter', 'Award letter'],
   ['tuition_bill', 'Tuition bill'],
+  ['financial_aid_package', 'Financial aid package'],
   ['study_abroad_quote', 'Study-abroad quote'],
+  ['loan_offer', 'Loan offer'],
+  ['payment_plan', 'Payment plan'],
+  ['housing_contract', 'Housing contract'],
+  ['other', 'Other document'],
 ]
 
 function formatMoney(amount, currency = 'USD') {
@@ -156,6 +161,7 @@ function DocumentRow({ document, onAction, onPreview, onEdit, busy }) {
           <span className="min-w-0">
             <span className="block truncate font-medium text-white">{document.filename}</span>
             <span className="mt-1 block text-xs text-slate-400">{typeLabel(document.document_type)} · {document.status} · {document.state}</span>
+            {document.extraction_source && <span className={`mt-2 inline-flex rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-wide ${document.extraction_source === 'gemini' ? 'bg-emerald-400/10 text-emerald-300' : 'bg-amber-400/10 text-amber-300'}`}>{document.extraction_source === 'gemini' ? 'Read by AI' : 'Basic parser (limited)'}</span>}
             <span className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-300">
               <span>{formatMoney(document.amount, document.currency)}</span>
               <span>{document.term || 'Term not found'}</span>
@@ -198,7 +204,6 @@ function App() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const [selectedFiles, setSelectedFiles] = useState([])
-  const [uploadTypes, setUploadTypes] = useState({})
   const [correction, setCorrection] = useState(null)
 
   useEffect(() => {
@@ -338,7 +343,7 @@ function App() {
     for (const item of selectedFiles) {
       const { file } = item
       try {
-        const result = await uploadDocument(file, uploadTypes[item.id] || undefined)
+        const result = await uploadDocument(file)
         results.push(result)
         if (result.status === 'failed') failures.push(`${file.name}: ${result.extraction_error || 'Text extraction failed.'}`)
       } catch (cause) {
@@ -346,7 +351,6 @@ function App() {
       }
     }
     setSelectedFiles([])
-    setUploadTypes({})
     await reloadData()
     if (results.length) setNotice(`${results.length} document${results.length === 1 ? '' : 's'} uploaded.`)
     if (failures.length) setError(failures.join(' '))
@@ -501,13 +505,9 @@ function App() {
           {selectedFiles.length > 0 && <div className="mt-4 space-y-2">
             {selectedFiles.map(({ id, file }) => <div key={id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-[#0f141a] p-3">
               <div className="min-w-0"><p className="truncate text-sm text-white">{file.name}</p><p className="text-xs text-slate-400">{(file.size / 1024 / 1024).toFixed(2)} MB</p></div>
-              <select aria-label={`Optional document type hint for ${file.name}`} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white" value={uploadTypes[id] ?? ''} onChange={(event) => setUploadTypes((current) => ({ ...current, [id]: event.target.value }))}>
-                <option value="">Let Muni identify it</option>
-                {documentTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
               <button type="button" className="text-sm text-slate-400 hover:text-white" onClick={() => setSelectedFiles((current) => current.filter((selected) => selected.id !== id))} aria-label={`Remove ${file.name} from upload list`}>Remove</button>
             </div>)}
-            <p className="text-xs text-slate-400">A type hint is optional. Muni identifies the document from its contents.</p>
+            <p className="text-xs text-slate-400">Muni identifies each document from its contents. You can correct the type after upload.</p>
             <button type="button" disabled={busy} onClick={() => void uploadSelectedFiles()} className="rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50">{busy ? 'Uploading and reading…' : 'Upload for review'}</button>
           </div>}
         </SectionCard>

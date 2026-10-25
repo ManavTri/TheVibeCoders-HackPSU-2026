@@ -1,18 +1,14 @@
 import { useRef, useState } from 'react'
-import type { ChangeEvent, FormEvent } from 'react'
+import type { FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { UploadDocumentReview } from '../components/UploadDocumentReview'
 import { Button } from '../components/ui/Button'
 import { useDocuments } from '../hooks/useDocuments'
-import { documentTypeLabels } from '../lib/utils'
-import type { DocumentRecord, DocumentType } from '../types/api'
+import type { DocumentRecord } from '../types/api'
 
 interface SelectedFile {
   file: File
-  typeHint: DocumentType | ''
 }
-
-const types = Object.keys(documentTypeLabels) as DocumentType[]
 
 export function Upload() {
   const [selected, setSelected] = useState<SelectedFile[]>([])
@@ -25,13 +21,7 @@ export function Upload() {
     if (!files) return
     const pdfs = Array.from(files).filter((file) => file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf'))
     if (pdfs.length !== files.length) setError('Only PDF documents are supported.')
-    setSelected((current) => [...current, ...pdfs.map((file) => ({ file, typeHint: '' as const }))])
-  }
-
-  function updateTypeHint(index: number, event: ChangeEvent<HTMLSelectElement>) {
-    setSelected((current) => current.map((item, itemIndex) => itemIndex === index
-      ? { ...item, typeHint: event.target.value as DocumentType | '' }
-      : item))
+    setSelected((current) => [...current, ...pdfs.map((file) => ({ file }))])
   }
 
   async function uploadFiles(event: FormEvent) {
@@ -43,7 +33,6 @@ export function Upload() {
     }
     const result = await upload(
       selected.map((item) => item.file),
-      selected.map((item) => item.typeHint || null),
     )
     if (result) {
       setDocuments((current) => [...result.documents, ...current])
@@ -80,11 +69,10 @@ export function Upload() {
           <div className="selected-heading"><span>READY TO UPLOAD</span><span>{selected.length} added</span></div>
           {selected.map((item, index) => <div className="selected-file" key={`${item.file.name}-${index}`}>
             <span className="file-icon">PDF</span><span className="file-name">{item.file.name}<small>{(item.file.size / 1024 / 1024).toFixed(2)} MB</small></span>
-            <label className="type-select"><span className="visually-hidden">Optional document type hint for {item.file.name}</span><select value={item.typeHint} onChange={(event) => updateTypeHint(index, event)}><option value="">Let Gemini identify it</option>{types.map((type) => <option value={type} key={type}>{documentTypeLabels[type]}</option>)}</select></label>
             <button type="button" className="remove-file" aria-label={`Remove ${item.file.name}`} onClick={() => setSelected((current) => current.filter((_, itemIndex) => itemIndex !== index))}>×</button>
           </div>)}
         </div>}
-        {selected.length > 0 && <div className="upload-actions"><Button type="submit" disabled={busy}>{busy ? 'Reading your documents…' : 'Upload and review'} <span aria-hidden="true">↗</span></Button><span>A type hint is optional; Gemini classifies the document from its contents.</span></div>}
+        {selected.length > 0 && <div className="upload-actions"><Button type="submit" disabled={busy}>{busy ? 'Reading your documents…' : 'Upload and review'} <span aria-hidden="true">↗</span></Button><span>Muni classifies each document from its contents. You can correct the type after upload.</span></div>}
       </form>
 
       {documents.length > 0 && <section className="upload-review-section">

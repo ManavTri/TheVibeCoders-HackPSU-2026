@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { createValidation, uploadDocument } from '../lib/api'
-import type { DocumentRecord, DocumentType, ValidationReport } from '../types/api'
+import type { DocumentRecord, ValidationReport } from '../types/api'
 
 export interface UploadBatchResult {
   documents: DocumentRecord[]
@@ -11,12 +11,12 @@ export function useDocuments() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  async function upload(files: File[], documentTypes: Array<DocumentType | null>): Promise<UploadBatchResult | null> {
+  async function upload(files: File[]): Promise<UploadBatchResult | null> {
     setBusy(true)
     setError('')
     try {
       const results = await Promise.allSettled(
-        files.map((file, index) => uploadDocument(file, documentTypes[index] ?? undefined)),
+        files.map((file) => uploadDocument(file)),
       )
       const documents: DocumentRecord[] = []
       const failedFiles: File[] = []
