@@ -602,11 +602,13 @@ def test_financial_summary_uses_python_totals_and_separates_currency(client) -> 
     ledger = get_current_ledger("local-demo")
 
     assert summary["by_currency"]["USD"] == {
-        "funding": "12000",
+        "funding": "0",
+        "expected_funding": "12000",
         "costs": "18000",
         "loans": "0",
         "payments": "0",
-        "remaining_balance_after_funding": "6000",
+        "remaining_balance_after_funding": "18000",
+        "remaining_balance_after_expected_funding": "6000",
     }
     assert {item["id"] for item in summary["documents"]} == {award["id"], tuition["id"]}
     assert Decimal(summary["by_currency"]["USD"]["costs"]) == Decimal(
@@ -614,6 +616,13 @@ def test_financial_summary_uses_python_totals_and_separates_currency(client) -> 
     )
     assert Decimal(summary["by_currency"]["USD"]["funding"]) == Decimal(
         ledger["total"]["USD"]["aid"]
+    )
+    assert Decimal(summary["by_currency"]["USD"]["expected_funding"]) == sum(
+        (
+            Decimal(entry["amount"])
+            for entry in ledger["total"]["USD"]["expected_not_yet_billed"]
+        ),
+        Decimal(0),
     )
 
 

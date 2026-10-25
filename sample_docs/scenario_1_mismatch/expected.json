@@ -21,7 +21,6 @@
   },
   "expected_rule_ids": [
     "coverage.term_gap",
-    "coverage.term_surplus",
     "eligibility.credit_requirement"
   ],
   "expected_absent_rule_ids": [

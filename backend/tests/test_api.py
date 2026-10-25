@@ -51,7 +51,8 @@ def test_documents_validations_and_insights_flow(client: TestClient) -> None:
     assert created.status_code == 201
     report = created.json()
     finding_ids = {finding["rule_id"] for finding in report["findings"]}
-    assert {"coverage.term_gap", "coverage.term_surplus"}.issubset(finding_ids)
+    assert "coverage.term_gap" in finding_ids
+    assert "coverage.term_surplus" not in finding_ids
     assert not {"deadline.different_dates", "term.documents_disagree"}.intersection(finding_ids)
     assert client.get(f"/api/validations/{report['id']}").status_code == 200
     insights = client.post("/api/insights", json={"run_id": report["id"]}).json()

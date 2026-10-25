@@ -58,6 +58,7 @@ def test_scenario_one_pdfs_match_expected_rules(client: TestClient) -> None:
     expected = json.loads((scenario / "expected.json").read_text(encoding="utf-8"))
     actual = {finding["rule_id"] for finding in report.json()}
     assert set(expected["expected_rule_ids"]).issubset(actual)
+    assert "coverage.term_surplus" not in actual
     assert not set(expected.get("expected_absent_rule_ids", [])).intersection(actual)
 
 
@@ -70,4 +71,5 @@ def test_study_abroad_sample_matches_expected_rules(client: TestClient) -> None:
     expected = json.loads((scenario / "expected.json").read_text(encoding="utf-8"))
     actual = {finding["rule_id"] for finding in report.json()}
     assert set(expected["expected_rule_ids"]).issubset(actual)
+    assert "coverage.term_surplus" not in actual
     assert not set(expected.get("expected_absent_rule_ids", [])).intersection(actual)

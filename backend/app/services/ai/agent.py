@@ -370,6 +370,14 @@ def _financial_summary(user_id: str) -> dict[str, Any]:
             ),
             Decimal(0),
         )
+        expected_funding = sum(
+            (
+                Decimal(str(entry["amount"]))
+                for entry in amount_totals["expected_not_yet_billed"]
+                if entry["kind"] != "loan"
+            ),
+            Decimal(0),
+        )
         loans = Decimal(str(aid_by_kind.get("loan", "0")))
         costs = sum(
             (Decimal(str(amount)) for amount in amount_totals["charges_by_kind"].values()),
@@ -378,11 +386,15 @@ def _financial_summary(user_id: str) -> dict[str, Any]:
         payments = Decimal(str(amount_totals["payments"]))
         totals[currency] = {
             "funding": funding,
+            "expected_funding": expected_funding,
             "costs": costs,
             "loans": loans,
             "payments": payments,
         }
-        for entry in amount_totals["provenance"]:
+        for entry in [
+            *amount_totals["provenance"],
+            *amount_totals["expected_not_yet_billed"],
+        ]:
             document_id = entry["document_id"]
             record = records.get(document_id)
             if record is None:
@@ -405,16 +417,31 @@ def _financial_summary(user_id: str) -> dict[str, Any]:
         "by_currency": {
             currency: {
                 "funding": _decimal_text(values["funding"]),
+                "expected_funding": _decimal_text(values["expected_funding"]),
                 "costs": _decimal_text(values["costs"]),
                 "loans": _decimal_text(values["loans"]),
                 "payments": _decimal_text(values["payments"]),
                 "remaining_balance_after_funding": _decimal_text(
                     max(Decimal(0), values["costs"] - values["funding"] - values["payments"])
                 ),
+                "remaining_balance_after_expected_funding": _decimal_text(
+                    max(
+                        Decimal(0),
+                        values["costs"]
+                        - values["funding"]
+                        - values["expected_funding"]
+                        - values["payments"],
+                    )
+                ),
             }
             for currency, values in sorted(totals.items())
         },
-        "basis": "Totals use the same term-aware ledger as GET /ledger; currencies are not converted.",
+        "basis": (
+            "Funding and remaining_balance_after_funding use billed aid only. "
+            "expected_funding is awarded aid not yet matched to bill credits; it is shown "
+            "separately and does not reduce the billed balance. Totals use the same "
+            "term-aware ledger as GET /ledger; currencies are not converted."
+        ),
         "documents": list(sources_by_id.values()),
         "terms": ledger["terms"],
         "annual_unallocated": ledger["annual_unallocated"],
