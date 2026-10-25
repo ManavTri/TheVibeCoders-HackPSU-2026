@@ -50,11 +50,40 @@ class LineItem(BaseModel):
     amount: Decimal
     category: str
     date: Date | None = None
+    direction: Literal["charge", "credit", "unknown"] | None = None
+    term: str | None = None
+    kind: Literal[
+        "tuition",
+        "fees",
+        "housing",
+        "meals",
+        "books",
+        "travel",
+        "program_fee",
+        "insurance",
+        "other_charge",
+        "scholarship",
+        "grant",
+        "loan",
+        "work_study",
+        "waiver",
+        "payment",
+        "refund",
+        "other",
+    ] | None = None
 
 
 class Disbursement(BaseModel):
     date: Date
     amount: Decimal
+    term: str | None = None
+    award_label: str | None = None
+
+
+class PaymentDueDate(BaseModel):
+    label: str
+    date: Date
+    term: str | None = None
 
 
 class ExtractionEnvelope(BaseModel):
@@ -70,6 +99,11 @@ class ExtractionEnvelope(BaseModel):
     deadlines: list[DeadlineItem] = Field(default_factory=list)
     line_items: list[LineItem] = Field(default_factory=list)
     disbursements: list[Disbursement] = Field(default_factory=list)
+    enrollment_credits: int | None = Field(default=None, ge=0)
+    academic_year: str | None = None
+    terms: list[str] = Field(default_factory=list)
+    payment_due_dates: list[PaymentDueDate] = Field(default_factory=list)
+    exchange_rate: Decimal | None = Field(default=None, gt=0)
     conditions: list[str] = Field(default_factory=list)
     summary: str = Field(default="", max_length=300)
     action_required: bool = False
