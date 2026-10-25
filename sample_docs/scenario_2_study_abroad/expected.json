@@ -20,8 +20,12 @@
     }
   },
   "expected_rule_ids": [
-    "deadline.different_dates",
-    "credits.requirements_disagree"
+    "coverage.term_surplus",
+    "eligibility.credit_requirement"
   ],
-  "note": "The current amount comparison only compares award letters with tuition bills; it does not infer whether a scholarship pays for study-abroad costs."
+  "expected_absent_rule_ids": [
+    "deadline.different_dates",
+    "term.documents_disagree"
+  ],
+  "note": "The program quote is treated as an estimate, not a billed charge. The rule engine does not infer that a scholarship can be applied to study-abroad costs."
 }

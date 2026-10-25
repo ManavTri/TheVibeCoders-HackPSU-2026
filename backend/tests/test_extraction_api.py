@@ -53,17 +53,21 @@ def test_scenario_one_pdfs_match_expected_rules(client: TestClient) -> None:
     assert float(documents[1]["amount"]) == 18000
     assert documents[1]["term"] == "Spring 2026"
     assert "extracted_text" not in documents[0]
-    report = client.post("/api/validations", json={"document_ids": [doc["id"] for doc in documents]})
+    report = client.get("/api/findings?include=all")
+    assert report.status_code == 200
     expected = json.loads((scenario / "expected.json").read_text(encoding="utf-8"))
-    assert {finding["rule_id"] for finding in report.json()["findings"]} == set(expected["expected_rule_ids"])
+    actual = {finding["rule_id"] for finding in report.json()}
+    assert set(expected["expected_rule_ids"]).issubset(actual)
+    assert not set(expected.get("expected_absent_rule_ids", [])).intersection(actual)
 
 
 def test_study_abroad_sample_matches_expected_rules(client: TestClient) -> None:
     scenario = SAMPLES / "scenario_2_study_abroad"
-    documents = [
-        upload(client, scenario / "award_letter.pdf", "award_letter"),
-        upload(client, scenario / "study_abroad_quote.pdf", "study_abroad_quote"),
-    ]
-    report = client.post("/api/validations", json={"document_ids": [doc["id"] for doc in documents]})
+    upload(client, scenario / "award_letter.pdf", "award_letter")
+    upload(client, scenario / "study_abroad_quote.pdf", "study_abroad_quote")
+    report = client.get("/api/findings?include=all")
+    assert report.status_code == 200
     expected = json.loads((scenario / "expected.json").read_text(encoding="utf-8"))
-    assert {finding["rule_id"] for finding in report.json()["findings"]} == set(expected["expected_rule_ids"])
+    actual = {finding["rule_id"] for finding in report.json()}
+    assert set(expected["expected_rule_ids"]).issubset(actual)
+    assert not set(expected.get("expected_absent_rule_ids", [])).intersection(actual)

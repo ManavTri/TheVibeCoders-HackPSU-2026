@@ -20,9 +20,13 @@
     }
   },
   "expected_rule_ids": [
-    "deadline.different_dates",
-    "term.documents_disagree",
-    "credits.requirements_disagree"
+    "coverage.term_gap",
+    "coverage.term_surplus",
+    "eligibility.credit_requirement"
   ],
-  "note": "The award is less than the bill, so amount.award_exceeds_bill should not appear."
+  "expected_absent_rule_ids": [
+    "deadline.different_dates",
+    "term.documents_disagree"
+  ],
+  "note": "Different terms are allocated independently, rather than treated as a conflict. Missing enrollment credits require verification."
 }

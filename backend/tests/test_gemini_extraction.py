@@ -8,8 +8,11 @@ from app.core.config import Settings
 from app.main import app
 from app.schemas.documents import (
     DeadlineItem,
+    Disbursement,
     DocumentType,
     ExtractionEnvelope,
+    LineItem,
+    PaymentDueDate,
 )
 from app.services.extraction.extractor import (
     GeminiExtractor,
@@ -89,6 +92,51 @@ def test_gemini_envelope_populates_typed_document_and_legacy_fields() -> None:
     assert result.extraction_source == "gemini"
     assert result.type_confidence == 0.95
     assert result.needs_review is False
+
+
+def test_extraction_envelope_accepts_optional_term_ledger_fields() -> None:
+    envelope = make_envelope()
+    envelope_data = envelope.model_dump()
+    envelope_data.update(
+        enrollment_credits=15,
+        academic_year="2026-2027",
+        terms=["Fall 2026", "Spring 2027"],
+        payment_due_dates=[
+            PaymentDueDate(
+                label="Fall payment",
+                date="2026-08-01",
+                term="Fall 2026",
+            )
+        ],
+        exchange_rate="1.08",
+        line_items=[
+            LineItem(
+                label="Tuition",
+                amount="5000",
+                category="tuition",
+                direction="charge",
+                term="Fall 2026",
+                kind="tuition",
+            )
+        ],
+        disbursements=[
+            Disbursement(
+                date="2026-08-20",
+                amount="2500",
+                term="Fall 2026",
+                award_label="Merit Award",
+            )
+        ],
+    )
+    extended = ExtractionEnvelope(
+        **envelope_data,
+    )
+
+    assert extended.enrollment_credits == 15
+    assert extended.terms == ["Fall 2026", "Spring 2027"]
+    assert extended.line_items[0].direction == "charge"
+    assert extended.line_items[0].term == "Fall 2026"
+    assert extended.disbursements[0].award_label == "Merit Award"
 
 
 def test_gemini_timeout_retries_once_then_uses_parser_fallback() -> None:

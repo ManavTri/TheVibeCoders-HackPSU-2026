@@ -1,0 +1,626 @@
+{
+  "scenarios": [
+    {
+      "name": "term gap",
+      "documents": [
+        {
+          "id": "gap-bill",
+          "filename": "gap-bill.pdf",
+          "document_type": "tuition_bill",
+          "amount": "500",
+          "term": "Fall 2026"
+        }
+      ],
+      "expected": {
+        "rule_id": "coverage.term_gap",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": "500.00"
+      }
+    },
+    {
+      "name": "term surplus",
+      "documents": [
+        {
+          "id": "surplus-award",
+          "filename": "surplus-award.pdf",
+          "document_type": "award_letter",
+          "amount": "1200",
+          "term": "Fall 2026"
+        }
+      ],
+      "expected": {
+        "rule_id": "coverage.term_surplus",
+        "term": "Fall 2026",
+        "severity": "info",
+        "impact_amount": "1200.00"
+      }
+    },
+    {
+      "name": "award missing on bill",
+      "documents": [
+        {
+          "id": "missing-award",
+          "filename": "north-grant.pdf",
+          "document_type": "award_letter",
+          "amount": "1000",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "North Grant",
+                "amount": "1000",
+                "category": "grant",
+                "kind": "grant",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        },
+        {
+          "id": "missing-bill",
+          "filename": "fall-bill.pdf",
+          "document_type": "tuition_bill",
+          "amount": "6000",
+          "term": "Fall 2026"
+        }
+      ],
+      "expected": {
+        "rule_id": "award.missing_on_bill",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": "1000.00"
+      }
+    },
+    {
+      "name": "unsupported bill credit",
+      "documents": [
+        {
+          "id": "unmatched-bill",
+          "filename": "unmatched-bill.pdf",
+          "document_type": "tuition_bill",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "External Grant Credit",
+                "amount": "300",
+                "category": "grant",
+                "kind": "grant",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "bill.unsupported_credit",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": "300.00"
+      }
+    },
+    {
+      "name": "award amount mismatch",
+      "documents": [
+        {
+          "id": "award-one",
+          "filename": "north-award-1.pdf",
+          "document_type": "award_letter",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "North Scholarship",
+                "amount": "1000",
+                "category": "scholarship",
+                "kind": "scholarship",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        },
+        {
+          "id": "award-two",
+          "filename": "north-award-2.pdf",
+          "document_type": "financial_aid_package",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "North Scholarship",
+                "amount": "1200",
+                "category": "scholarship",
+                "kind": "scholarship",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "award.amount_mismatch",
+        "term": "Fall 2026",
+        "severity": "error",
+        "impact_amount": "200.00"
+      }
+    },
+    {
+      "name": "disbursement split",
+      "documents": [
+        {
+          "id": "split-award",
+          "filename": "split-award.pdf",
+          "document_type": "award_letter",
+          "amount": "900",
+          "term": "Academic Year 2026-2027",
+          "extraction_envelope": {
+            "total_amount": "900",
+            "disbursements": [
+              {"date": "2026-08-20", "amount": "500", "term": "Fall 2026"},
+              {"date": "2027-01-15", "amount": "300", "term": "Spring 2027"}
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "award.disbursement_split",
+        "term": "Academic Year 2026-2027",
+        "severity": "warning",
+        "impact_amount": "100.00"
+      }
+    },
+    {
+      "name": "disbursement after payment due date",
+      "documents": [
+        {
+          "id": "late-award",
+          "filename": "late-award.pdf",
+          "document_type": "award_letter",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "disbursements": [
+              {"date": "2026-09-02", "amount": "1000", "term": "Fall 2026"}
+            ]
+          }
+        },
+        {
+          "id": "late-bill",
+          "filename": "late-bill.pdf",
+          "document_type": "tuition_bill",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "payment_due_dates": [
+              {"label": "Payment due", "date": "2026-08-01", "term": "Fall 2026"}
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "timing.disbursement_after_due",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": "1000.00"
+      }
+    },
+    {
+      "name": "overdue labeled deadline",
+      "documents": [
+        {
+          "id": "deadline",
+          "filename": "deadline.pdf",
+          "document_type": "other",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "deadlines": [
+              {"label": "Renewal response", "date": "2026-06-30"}
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "timing.deadline_status",
+        "term": "Fall 2026",
+        "severity": "error",
+        "impact_amount": null
+      }
+    },
+    {
+      "name": "credit eligibility",
+      "documents": [
+        {
+          "id": "credit-award",
+          "filename": "credit-award.pdf",
+          "document_type": "award_letter",
+          "required_credits": 12,
+          "term": "Fall 2026"
+        },
+        {
+          "id": "credit-bill",
+          "filename": "credit-bill.pdf",
+          "document_type": "tuition_bill",
+          "term": "Fall 2026",
+          "extraction_envelope": {"enrollment_credits": 9}
+        }
+      ],
+      "expected": {
+        "rule_id": "eligibility.credit_requirement",
+        "term": "Fall 2026",
+        "severity": "error",
+        "impact_amount": null
+      }
+    },
+    {
+      "name": "grouped award conditions",
+      "documents": [
+        {
+          "id": "conditions",
+          "filename": "conditions.pdf",
+          "document_type": "award_letter",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "min_gpa": "3.0",
+            "conditions": ["Maintain full-time enrollment", "Renew by June 1"]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "eligibility.credit_requirement",
+        "term": "Fall 2026",
+        "severity": "info",
+        "impact_amount": null
+      }
+    },
+    {
+      "name": "duplicate award",
+      "documents": [
+        {
+          "id": "duplicate-one",
+          "filename": "duplicate-1.pdf",
+          "document_type": "award_letter",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Promise Scholarship",
+                "amount": "1000",
+                "category": "scholarship",
+                "kind": "scholarship",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        },
+        {
+          "id": "duplicate-two",
+          "filename": "duplicate-2.pdf",
+          "document_type": "award_letter",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Promise Scholarship",
+                "amount": "1000",
+                "category": "scholarship",
+                "kind": "scholarship",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "duplicate.award",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": "1000.00"
+      }
+    },
+    {
+      "name": "aid exceeds cost estimate",
+      "documents": [
+        {
+          "id": "coa",
+          "filename": "coa-package.pdf",
+          "document_type": "financial_aid_package",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Cost of Attendance Estimate",
+                "amount": "10000",
+                "category": "cost of attendance",
+                "kind": "tuition",
+                "direction": "charge"
+              }
+            ]
+          }
+        },
+        {
+          "id": "over-award",
+          "filename": "over-award.pdf",
+          "document_type": "award_letter",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Merit Grant",
+                "amount": "12000",
+                "category": "grant",
+                "kind": "grant",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "coverage.over_cost_of_attendance",
+        "term": null,
+        "severity": "warning",
+        "impact_amount": "2000.00"
+      }
+    },
+    {
+      "name": "program tuition double charge and aid gap",
+      "documents": [
+        {
+          "id": "program",
+          "filename": "program.pdf",
+          "document_type": "study_abroad_quote",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Program Tuition",
+                "amount": "8000",
+                "category": "tuition",
+                "kind": "tuition",
+                "direction": "charge",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        },
+        {
+          "id": "home-bill",
+          "filename": "home-bill.pdf",
+          "document_type": "tuition_bill",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Home Campus Tuition",
+                "amount": "6000",
+                "category": "tuition",
+                "kind": "tuition",
+                "direction": "charge",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": [
+        {
+          "rule_id": "program.double_charge",
+          "term": "Fall 2026",
+          "severity": "warning",
+          "impact_amount": "8000.00"
+        },
+        {
+          "rule_id": "program.aid_gap",
+          "term": "Fall 2026",
+          "severity": "info",
+          "impact_amount": "8000.00"
+        }
+      ]
+    },
+    {
+      "name": "loan offer mismatch",
+      "documents": [
+        {
+          "id": "loan-offer",
+          "filename": "loan-offer.pdf",
+          "document_type": "loan_offer",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Federal Direct Loan",
+                "amount": "5000",
+                "category": "loan",
+                "kind": "loan",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        },
+        {
+          "id": "loan-package",
+          "filename": "loan-package.pdf",
+          "document_type": "financial_aid_package",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Federal Direct Loan",
+                "amount": "4500",
+                "category": "loan",
+                "kind": "loan",
+                "direction": "credit",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "loan.offer_mismatch",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": "500.00"
+      }
+    },
+    {
+      "name": "installments differ from plan balance",
+      "documents": [
+        {
+          "id": "plan",
+          "filename": "plan.pdf",
+          "document_type": "payment_plan",
+          "amount": "1000",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Installment 1",
+                "amount": "400",
+                "category": "payment",
+                "kind": "payment",
+                "direction": "credit",
+                "date": "2026-08-01"
+              },
+              {
+                "label": "Installment 2",
+                "amount": "400",
+                "category": "payment",
+                "kind": "payment",
+                "direction": "credit",
+                "date": "2026-09-01"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "plan.installment_total",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": "200.00"
+      }
+    },
+    {
+      "name": "housing contract differs from bill",
+      "documents": [
+        {
+          "id": "housing",
+          "filename": "housing.pdf",
+          "document_type": "housing_contract",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Housing",
+                "amount": "5000",
+                "category": "housing",
+                "kind": "housing",
+                "direction": "charge",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        },
+        {
+          "id": "housing-bill",
+          "filename": "housing-bill.pdf",
+          "document_type": "tuition_bill",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "line_items": [
+              {
+                "label": "Housing",
+                "amount": "4500",
+                "category": "housing",
+                "kind": "housing",
+                "direction": "charge",
+                "term": "Fall 2026"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "housing.contract_vs_bill",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": "500.00"
+      }
+    },
+    {
+      "name": "multiple currencies are not summed",
+      "documents": [
+        {
+          "id": "usd-bill",
+          "filename": "usd-bill.pdf",
+          "document_type": "tuition_bill",
+          "currency": "USD",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "currency": "USD",
+            "line_items": [
+              {
+                "label": "Tuition",
+                "amount": "1000",
+                "category": "tuition",
+                "kind": "tuition",
+                "direction": "charge"
+              }
+            ]
+          }
+        },
+        {
+          "id": "eur-bill",
+          "filename": "eur-bill.pdf",
+          "document_type": "tuition_bill",
+          "currency": "EUR",
+          "term": "Fall 2026",
+          "extraction_envelope": {
+            "currency": "EUR",
+            "line_items": [
+              {
+                "label": "Program fee",
+                "amount": "200",
+                "category": "fees",
+                "kind": "fees",
+                "direction": "charge"
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "rule_id": "currency.mismatch",
+        "term": "Fall 2026",
+        "severity": "warning",
+        "impact_amount": null
+      }
+    },
+    {
+      "name": "incomplete extraction",
+      "documents": [
+        {
+          "id": "incomplete-statement",
+          "filename": "incomplete-statement.pdf",
+          "document_type": "other",
+          "term": "quarterly term",
+          "type_confidence": 0.4
+        }
+      ],
+      "expected": {
+        "rule_id": "quality.data_gaps",
+        "term": null,
+        "severity": "info",
+        "impact_amount": null
+      }
+    }
+  ]
+}

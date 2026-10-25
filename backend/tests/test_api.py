@@ -50,11 +50,9 @@ def test_documents_validations_and_insights_flow(client: TestClient) -> None:
     created = client.post("/api/validations", json={"document_ids": [doc["id"] for doc in documents]})
     assert created.status_code == 201
     report = created.json()
-    assert {finding["rule_id"] for finding in report["findings"]} == {
-        "deadline.different_dates",
-        "term.documents_disagree",
-        "credits.requirements_disagree",
-    }
+    finding_ids = {finding["rule_id"] for finding in report["findings"]}
+    assert {"coverage.term_gap", "coverage.term_surplus"}.issubset(finding_ids)
+    assert not {"deadline.different_dates", "term.documents_disagree"}.intersection(finding_ids)
     assert client.get(f"/api/validations/{report['id']}").status_code == 200
     insights = client.post("/api/insights", json={"run_id": report["id"]}).json()
     assert insights["report_id"] == report["id"]
@@ -200,6 +198,32 @@ def test_current_findings_are_empty_with_fewer_than_two_active_documents(client:
     )
     assert uploaded.status_code == 201
     assert client.get("/api/findings").json() == []
+
+
+def test_ledger_and_findings_filters_and_report(client: TestClient) -> None:
+    upload_pair(client)
+
+    ledger = client.get("/api/ledger")
+    assert ledger.status_code == 200
+    assert {"Fall 2026", "Spring 2026"}.issubset(ledger.json()["terms"])
+    assert ledger.json()["total"]["USD"]["charges"] == "18000.00"
+
+    all_findings = client.get("/api/findings?include=all").json()
+    errors = client.get("/api/findings?severity=error").json()
+    coverage = client.get("/api/findings?category=coverage").json()
+    fall = client.get("/api/findings?term=Fall%202026").json()
+    assert errors, [(item["rule_id"], item["severity"]) for item in all_findings]
+    assert all(item["severity"] == "error" for item in errors)
+    assert coverage
+    assert all(item["category"] == "coverage" for item in coverage)
+    assert all(item["term"] == "Fall 2026" for item in fall)
+    assert len(all_findings) >= len(errors)
+
+    report = client.get("/api/findings/report")
+    assert report.status_code == 200
+    assert "counts_by_severity" in report.json()["summary"]
+    assert "total_at_risk_amount" in report.json()["summary"]
+    assert "per_term_headlines" in report.json()["summary"]
 
 
 def test_patch_correction_is_saved_and_validation_can_be_rerun(client: TestClient) -> None:

@@ -1,5 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from threading import Event
 from types import SimpleNamespace
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routes.ai import get_ai_client
 from app.core.auth import current_user
+from app.db.repositories import get_current_ledger
 from app.main import app
 from app.services.ai import agent
 
@@ -597,14 +599,22 @@ def test_financial_summary_uses_python_totals_and_separates_currency(client) -> 
     )
 
     summary = agent._financial_summary("local-demo")
+    ledger = get_current_ledger("local-demo")
 
     assert summary["by_currency"]["USD"] == {
         "funding": "12000",
         "costs": "18000",
         "loans": "0",
+        "payments": "0",
         "remaining_balance_after_funding": "6000",
     }
     assert {item["id"] for item in summary["documents"]} == {award["id"], tuition["id"]}
+    assert Decimal(summary["by_currency"]["USD"]["costs"]) == Decimal(
+        ledger["total"]["USD"]["charges"]
+    )
+    assert Decimal(summary["by_currency"]["USD"]["funding"]) == Decimal(
+        ledger["total"]["USD"]["aid"]
+    )
 
 
 def test_context_documents_are_user_scoped_and_return_sources(client, monkeypatch) -> None:
