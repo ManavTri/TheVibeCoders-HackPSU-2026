@@ -186,7 +186,6 @@ class FallbackExtractor:
         envelope = ExtractionEnvelope(
             document_type=detected_type,
             type_confidence=confidence,
-            currency=document.currency,
             term=document.term,
             total_amount=document.amount,
             required_credits=document.required_credits,
@@ -229,9 +228,11 @@ class GeminiExtractor:
                 document_type_override=document_type_override,
             )
 
-        client = self.client or create_gemini_client(
-            self.settings.llm_api_key or "", self.settings.llm_timeout_seconds
-        )
+        if self.client is None:
+            self.client = create_gemini_client(
+                self.settings.llm_api_key or "", self.settings.llm_timeout_seconds
+            )
+        client = self.client
         for attempt in range(2):
             try:
                 response_text = generate_envelope(client, self.settings.llm_model, pdf_bytes)
@@ -273,6 +274,8 @@ def _is_retryable(error: Exception) -> bool:
     status = getattr(error, "status_code", None)
     if status is None:
         status = getattr(getattr(error, "response", None), "status_code", None)
+    if status is None:
+        status = getattr(error, "code", None)
     return status == 429 or isinstance(status, int) and 500 <= status < 600
 
 

@@ -24,7 +24,7 @@ class Settings(BaseSettings):
 
     @property
     def llm_enabled(self) -> bool:
-        return bool(self.llm_api_key)
+        return bool(self.llm_api_key and self.llm_api_key.strip())
 
     @property
     def allowed_origins(self) -> list[str]:
