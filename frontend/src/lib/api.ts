@@ -14,8 +14,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (data.session?.access_token) headers.set('Authorization', `Bearer ${data.session.access_token}`)
   const response = await fetch(`${apiUrl}/api${path}`, { ...init, headers })
   if (!response.ok) {
-    const body = (await response.json().catch(() => null)) as { detail?: string } | null
-    throw new Error(body?.detail || `Request failed (${response.status})`)
+    const body = (await response.json().catch(() => null)) as {
+      detail?: string | { message?: string }
+    } | null
+    const detail = body?.detail
+    const message = typeof detail === 'string' ? detail : detail?.message
+    throw new Error(message || `Request failed (${response.status})`)
   }
   if (response.status === 204) return undefined as T
   return response.json() as Promise<T>
