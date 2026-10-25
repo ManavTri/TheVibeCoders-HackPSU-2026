@@ -56,6 +56,9 @@ def _document_fields(document: FinancialDocument) -> dict[str, Any]:
         "term": document.term,
         "deadline": document.deadline.isoformat() if document.deadline else None,
         "required_credits": document.required_credits,
+        "enrollment_credits": document.enrollment_credits,
+        "extraction_source": document.extraction_source,
+        "extraction_fallback_reason": document.extraction_fallback_reason,
         "document_type": document.document_type.value,
     }
 
@@ -74,11 +77,13 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
         "term": extracted.get("term"),
         "deadline": extracted.get("deadline"),
         "required_credits": extracted.get("required_credits"),
+        "enrollment_credits": extracted.get("enrollment_credits"),
         "storage_path": row["storage_path"],
         "status": row["status"],
         "created_at": row["created_at"],
         "extraction_error": extracted.get("extraction_error"),
         "extraction_source": extracted.get("extraction_source"),
+        "extraction_fallback_reason": extracted.get("extraction_fallback_reason"),
         "type_confidence": extracted.get("type_confidence"),
         "type_detected": extracted.get("type_detected"),
         "needs_review": extracted.get("needs_review", False),
@@ -412,6 +417,9 @@ def update_document(
             "extraction_source": metadata.get(
                 "extraction_source", existing.get("extraction_source")
             ),
+            "extraction_fallback_reason": metadata.get(
+                "extraction_fallback_reason", existing.get("extraction_fallback_reason")
+            ),
             "type_confidence": metadata.get(
                 "type_confidence", existing.get("type_confidence")
             ),
@@ -464,6 +472,7 @@ def correct_document(
         {
             "envelope": existing.get("extraction_envelope"),
             "extraction_source": existing.get("extraction_source"),
+            "extraction_fallback_reason": existing.get("extraction_fallback_reason"),
             "type_confidence": existing.get("type_confidence"),
             "type_detected": existing.get("type_detected"),
             "needs_review": existing.get("needs_review", False),
@@ -554,6 +563,9 @@ def create_validation_run(
             "term": doc.term,
             "deadline": doc.deadline,
             "required_credits": doc.required_credits,
+            "enrollment_credits": doc.enrollment_credits,
+            "extraction_source": doc.extraction_source,
+            "extraction_fallback_reason": doc.extraction_fallback_reason,
         }
         for doc in documents
     ]
@@ -667,6 +679,9 @@ def get_validation_run(user_id: str, run_id: str) -> ValidationReport | None:
                     "term",
                     "deadline",
                     "required_credits",
+                    "enrollment_credits",
+                    "extraction_source",
+                    "extraction_fallback_reason",
                 )
             }
             for document_id in run["document_ids"]

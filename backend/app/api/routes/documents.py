@@ -75,7 +75,13 @@ async def upload_document(
     if existing:
         raise _duplicate_document_response(existing)
     try:
-        record = create_document(user_id, filename, None, content, content_sha256)
+        record = create_document(
+            user_id,
+            filename,
+            document_type if document_type is not None else None,
+            content,
+            content_sha256,
+        )
     except DuplicateDocumentError as exc:
         raise _duplicate_document_response(exc.existing) from exc
 
@@ -128,7 +134,11 @@ def _extract_and_save(
             failed_document,
             DocumentStatus.FAILED,
             extraction_error=str(exc),
-            extraction_metadata={"extraction_source": "fallback", "needs_review": True},
+            extraction_metadata={
+                "extraction_source": "fallback",
+                "extraction_fallback_reason": getattr(exc, "fallback_reason", None),
+                "needs_review": True,
+            },
             preserve_user_edits=preserve_user_edits,
         )
         if updated is None:
@@ -159,6 +169,7 @@ def _extraction_metadata(result: ExtractionResult) -> dict[str, Any]:
     return {
         "envelope": result.envelope.model_dump(mode="json"),
         "extraction_source": result.extraction_source,
+        "extraction_fallback_reason": result.extraction_fallback_reason,
         "type_confidence": result.type_confidence,
         "type_detected": result.type_detected.value,
         "needs_review": result.needs_review,

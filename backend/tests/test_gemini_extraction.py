@@ -15,6 +15,7 @@ from app.schemas.documents import (
     PaymentDueDate,
 )
 from app.services.extraction.extractor import (
+    FallbackExtractor,
     GeminiExtractor,
 )
 from app.services.extraction.prompts import EXTRACTION_INSTRUCTIONS
@@ -146,6 +147,7 @@ def test_gemini_timeout_retries_once_then_uses_parser_fallback() -> None:
     result = extractor.extract(document_id="doc-1", filename="award.pdf", pdf_bytes=pdf)
 
     assert result.extraction_source == "fallback"
+    assert result.extraction_fallback_reason == "timeout"
     assert result.document.amount == 12000
     assert len(extractor.client.models.calls) == 2
 
@@ -157,6 +159,7 @@ def test_gemini_server_error_retries_once_then_uses_parser_fallback() -> None:
     result = extractor.extract(document_id="doc-1", filename="award.pdf", pdf_bytes=pdf)
 
     assert result.extraction_source == "fallback"
+    assert result.extraction_fallback_reason == "api_error"
     assert len(extractor.client.models.calls) == 2
 
 
@@ -170,6 +173,16 @@ def test_gemini_rate_limit_retries_once() -> None:
     assert len(extractor.client.models.calls) == 2
 
 
+def test_gemini_rate_limit_fallback_records_reason() -> None:
+    pdf = (SAMPLES / "scenario_1_mismatch" / "award_letter.pdf").read_bytes()
+    extractor = configured_gemini([ClientError(429, {}), ClientError(429, {})])
+
+    result = extractor.extract(document_id="doc-1", filename="award.pdf", pdf_bytes=pdf)
+
+    assert result.extraction_source == "fallback"
+    assert result.extraction_fallback_reason == "rate_limited"
+
+
 def test_invalid_gemini_json_uses_parser_fallback_without_retry() -> None:
     pdf = (SAMPLES / "scenario_1_mismatch" / "award_letter.pdf").read_bytes()
     extractor = configured_gemini(["not JSON"])
@@ -177,6 +190,7 @@ def test_invalid_gemini_json_uses_parser_fallback_without_retry() -> None:
     result = extractor.extract(document_id="doc-1", filename="award.pdf", pdf_bytes=pdf)
 
     assert result.extraction_source == "fallback"
+    assert result.extraction_fallback_reason == "invalid_output"
     assert len(extractor.client.models.calls) == 1
 
 
@@ -188,7 +202,41 @@ def test_missing_api_key_uses_fallback_without_calling_gemini() -> None:
     result = extractor.extract(document_id="doc-1", filename="award.pdf", pdf_bytes=pdf)
 
     assert result.extraction_source == "fallback"
+    assert result.extraction_fallback_reason == "no_api_key"
     assert client.models.calls == []
+
+
+def test_missing_model_uses_fallback_without_calling_gemini() -> None:
+    pdf = (SAMPLES / "scenario_1_mismatch" / "award_letter.pdf").read_bytes()
+    client = FakeGeminiClient([])
+    extractor = GeminiExtractor(
+        Settings(llm_api_key="offline-test-key", llm_model=None), client=client
+    )
+
+    result = extractor.extract(document_id="doc-1", filename="award.pdf", pdf_bytes=pdf)
+
+    assert result.extraction_source == "fallback"
+    assert result.extraction_fallback_reason == "no_model"
+    assert client.models.calls == []
+
+
+def test_fallback_statement_maps_enrolled_credits(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.extraction.extractor.extract_text",
+        lambda _pdf: "Student Account Statement\nFall 2026\nEnrolled credits: 14\n",
+    )
+
+    result = FallbackExtractor().extract(
+        document_id="doc-1",
+        filename="statement.pdf",
+        pdf_bytes=b"not a real pdf",
+        fallback_reason="no_api_key",
+    )
+
+    assert result.document.document_type is DocumentType.TUITION_BILL
+    assert result.document.enrollment_credits == 14
+    assert result.document.required_credits is None
+    assert result.extraction_fallback_reason == "no_api_key"
 
 
 def test_pdf_text_is_only_sent_as_a_pdf_part_not_prompt_instructions() -> None:

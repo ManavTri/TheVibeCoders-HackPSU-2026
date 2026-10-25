@@ -182,3 +182,83 @@ def test_program_double_charge_impact_uses_tuition_only_but_keeps_fee_evidence()
     assert any(evidence.label == "Program and Insurance Fee" for evidence in double_charge.evidence)
     assert "8,400.00" in double_charge.explanation
     assert "6,750.00" in double_charge.explanation
+
+
+def test_clean_award_and_bill_have_no_findings_when_credits_and_aid_match() -> None:
+    award = document(
+        "award",
+        DocumentType.AWARD_LETTER,
+        "Fall 2026",
+        {
+            "total_amount": "12000",
+            "required_credits": 12,
+            "line_items": [
+                {
+                    "label": "Merit Scholarship",
+                    "amount": "12000",
+                    "category": "scholarship",
+                    "kind": "scholarship",
+                    "direction": "credit",
+                    "term": "Fall 2026",
+                }
+            ],
+            "disbursements": [
+                {
+                    "date": "2026-08-15",
+                    "amount": "12000",
+                    "term": "Fall 2026",
+                    "award_label": "Merit Scholarship",
+                }
+            ],
+        },
+    )
+    bill = document(
+        "bill",
+        DocumentType.TUITION_BILL,
+        "Fall 2026",
+        {
+            "total_amount": "12000",
+            "enrollment_credits": 14,
+            "line_items": [
+                {
+                    "label": "Tuition",
+                    "amount": "12000",
+                    "category": "tuition",
+                    "kind": "tuition",
+                    "direction": "charge",
+                    "term": "Fall 2026",
+                },
+                {
+                    "label": "Merit Scholarship",
+                    "amount": "12000",
+                    "category": "scholarship",
+                    "kind": "scholarship",
+                    "direction": "credit",
+                    "term": "Fall 2026",
+                },
+            ],
+            "payment_due_dates": [
+                {"label": "Payment due", "date": "2026-12-15", "term": "Fall 2026"}
+            ],
+        },
+    )
+
+    findings = evaluate_findings([award, bill], today=TODAY, include_all=True)
+
+    assert findings == []
+
+
+def test_fallback_documents_have_one_grouped_quality_notice() -> None:
+    first = document("first", DocumentType.TUITION_BILL, "Fall 2026", {"total_amount": "1000"})
+    second = document("second", DocumentType.AWARD_LETTER, "Fall 2026", {"total_amount": "1000"})
+    first.extraction_source = "fallback"
+    first.extraction_fallback_reason = "no_api_key"
+    second.extraction_source = "fallback"
+    second.extraction_fallback_reason = "invalid_output"
+
+    findings = evaluate_findings([first, second], today=TODAY, include_all=True)
+
+    quality = [finding for finding in findings if finding.rule_id == "quality.extraction_fallback"]
+    assert len(quality) == 1
+    assert quality[0].title == "Some documents were read with the basic parser; results may be incomplete"
+    assert not any(finding.rule_id == "quality.data_gaps" for finding in findings)

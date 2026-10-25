@@ -7,12 +7,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import ai, documents, findings, insights, ledger, validations
 from app.core.auth import current_user
 from app.core.config import get_settings
+from app.services.extraction.extractor import log_gemini_startup
 
 settings = get_settings()
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    log_gemini_startup()
     if settings.app_env.lower() == "production":
         auth_provider_configured = bool(
             settings.auth0_domain and settings.auth0_audience

@@ -11,7 +11,48 @@ from app.services.validation.rules.common import (
 
 def quality_findings(context: RuleContext) -> list[Finding]:
     findings: list[Finding] = []
+    fallback_documents = [
+        document
+        for document in context.documents
+        if document.extraction_source == "fallback"
+    ]
+    if fallback_documents:
+        reasons = sorted(
+            {
+                document.extraction_fallback_reason
+                for document in fallback_documents
+                if document.extraction_fallback_reason
+            }
+        )
+        findings.append(
+            build_finding(
+                rule_id="quality.extraction_fallback",
+                severity=Severity.INFO,
+                category="data_quality",
+                title="Some documents were read with the basic parser; results may be incomplete",
+                explanation=(
+                    f"{len(fallback_documents)} document(s) were read without Gemini's full extraction. "
+                    "Review their extracted fields against the original files before relying on the findings."
+                ),
+                evidence=[
+                    evidence_for_document(
+                        document,
+                        "extraction_source",
+                        "Extraction source",
+                        "fallback",
+                    )
+                    for document in fallback_documents
+                ],
+                suggested_action="Review the basic-parser documents and correct any fields that were not read correctly.",
+                document_ids=[document.id for document in fallback_documents],
+                confidence="medium",
+                group_key="extraction-fallback",
+                fields={"extraction_fallback_reason": reasons},
+            )
+        )
     for document in context.documents:
+        if document.extraction_source == "fallback":
+            continue
         missing: list[str] = []
         evidence = []
         term = document_term(document)

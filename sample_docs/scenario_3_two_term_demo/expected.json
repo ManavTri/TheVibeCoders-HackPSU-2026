@@ -183,8 +183,8 @@
     },
     {
       "id": "A6",
-      "description": "No quality.data_gaps finding: every document has a parseable term, amounts and dates.",
-      "rule_prefix": "quality."
+      "description": "No per-document quality.data_gaps finding: fallback documents are represented by one grouped notice.",
+      "rule_prefix": "quality.data_gaps"
     },
     {
       "id": "A7",

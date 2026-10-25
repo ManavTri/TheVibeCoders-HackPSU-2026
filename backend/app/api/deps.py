@@ -1,5 +1,5 @@
 from typing import Annotated, Any
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import Depends
 

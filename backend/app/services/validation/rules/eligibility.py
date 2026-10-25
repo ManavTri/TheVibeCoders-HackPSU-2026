@@ -77,8 +77,12 @@ def _credit_requirement_findings(
         for document in context.documents:
             if document.id == award.id:
                 continue
+            if document.document_type.value != "tuition_bill":
+                continue
             envelope = document.extraction_envelope or {}
-            credits = envelope.get("enrollment_credits")
+            credits = document.enrollment_credits
+            if credits is None:
+                credits = envelope.get("enrollment_credits")
             if credits is None:
                 continue
             document_terms = _document_term_values(document)

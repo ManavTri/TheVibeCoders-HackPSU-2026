@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import time
 from dataclasses import dataclass
@@ -34,11 +35,27 @@ DATE_PATTERN = re.compile(
     r"\s+\d{1,2},?\s+\d{4}|\d{1,2}/\d{1,2}/\d{4})",
     re.IGNORECASE,
 )
-CREDIT_PATTERN = re.compile(r"(\d{1,2})\s+(?:minimum\s+)?credits?", re.IGNORECASE)
+ENROLLED_CREDITS_PATTERN = re.compile(
+    r"\benrolled\s+credits?\s*:\s*(\d{1,2})\b", re.IGNORECASE
+)
+REQUIRED_CREDITS_PATTERN = re.compile(
+    r"\b(?:requires?|minimum(?:\s+of)?|at\s+least)\s*:?\s*(\d{1,2})\s+credits?\b",
+    re.IGNORECASE,
+)
 TERM_PATTERN = re.compile(
     r"\b(Spring|Summer|Fall|Autumn|Winter)\s+(20\d{2})(?:\s+(?:semester|term))?\b",
     re.IGNORECASE,
 )
+TITLE_TYPE_PATTERNS = (
+    (re.compile(r"\baward\s+letter\b", re.IGNORECASE), DocumentType.AWARD_LETTER),
+    (re.compile(r"\bstatement\b", re.IGNORECASE), DocumentType.TUITION_BILL),
+    (re.compile(r"\bquote\b", re.IGNORECASE), DocumentType.STUDY_ABROAD_QUOTE),
+    (re.compile(r"\bagreement\b", re.IGNORECASE), DocumentType.HOUSING_CONTRACT),
+    (re.compile(r"\boffer\b", re.IGNORECASE), DocumentType.LOAN_OFFER),
+)
+
+logger = logging.getLogger(__name__)
+_startup_logged = False
 
 
 @dataclass(frozen=True)
@@ -49,10 +66,13 @@ class ExtractionResult:
     type_detected: DocumentType
     type_confidence: float
     needs_review: bool
+    extraction_fallback_reason: str | None = None
 
 
 class ExtractionError(ValueError):
-    pass
+    def __init__(self, message: str, fallback_reason: str | None = None) -> None:
+        super().__init__(message)
+        self.fallback_reason = fallback_reason
 
 
 class DocumentExtractor(Protocol):
@@ -91,7 +111,8 @@ def extract_document(
             amount = None
 
     term_match = TERM_PATTERN.search(text)
-    credits_match = CREDIT_PATTERN.search(text)
+    enrollment_match = ENROLLED_CREDITS_PATTERN.search(text)
+    required_match = REQUIRED_CREDITS_PATTERN.search(text)
     return FinancialDocument(
         id=document_id,
         filename=filename,
@@ -99,7 +120,8 @@ def extract_document(
         amount=amount,
         term=f"{term_match.group(1).title()} {term_match.group(2)}" if term_match else None,
         deadline=_date_match(text),
-        required_credits=int(credits_match.group(1)) if credits_match else None,
+        required_credits=int(required_match.group(1)) if required_match else None,
+        enrollment_credits=int(enrollment_match.group(1)) if enrollment_match else None,
     )
 
 
@@ -123,6 +145,7 @@ def _legacy_document(
         term=envelope.term,
         deadline=min(due_dates) if due_dates else None,
         required_credits=envelope.required_credits,
+        enrollment_credits=envelope.enrollment_credits,
     )
 
 
@@ -132,6 +155,7 @@ def _result(
     document_id: str,
     filename: str,
     source: str,
+    fallback_reason: str | None = None,
 ) -> ExtractionResult:
     return ExtractionResult(
         document=_legacy_document(
@@ -144,10 +168,23 @@ def _result(
         type_detected=envelope.document_type,
         type_confidence=envelope.type_confidence,
         needs_review=envelope.type_confidence < 0.6,
+        extraction_fallback_reason=fallback_reason,
     )
 
 
 def _fallback_type(text: str) -> tuple[DocumentType, float]:
+    title = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    for pattern, document_type in TITLE_TYPE_PATTERNS:
+        if pattern.search(title):
+            if document_type is DocumentType.HOUSING_CONTRACT and not any(
+                word in text.casefold() for word in ("housing", "residence", "dorm")
+            ):
+                return DocumentType.OTHER, 0.75
+            if document_type is DocumentType.LOAN_OFFER and not any(
+                word in text.casefold() for word in ("loan", "financial aid", "student aid")
+            ):
+                return DocumentType.FINANCIAL_AID_PACKAGE, 0.75
+            return document_type, 0.85
     value = text.casefold()
     if "study abroad" in value or "education abroad" in value:
         return DocumentType.STUDY_ABROAD_QUOTE, 0.5
@@ -174,6 +211,7 @@ class FallbackExtractor:
         filename: str,
         pdf_bytes: bytes,
         document_type_hint: DocumentType | None = None,
+        fallback_reason: str | None = None,
     ) -> ExtractionResult:
         text = extract_text(pdf_bytes)
         detected_type, confidence = _fallback_type(text)
@@ -190,6 +228,7 @@ class FallbackExtractor:
             term=document.term,
             total_amount=document.amount,
             required_credits=document.required_credits,
+            enrollment_credits=document.enrollment_credits,
             deadlines=[DeadlineItem(label="Payment due", date=due_date)] if due_date else [],
         )
         return _result(
@@ -197,6 +236,7 @@ class FallbackExtractor:
             document_id=document_id,
             filename=filename,
             source="fallback",
+            fallback_reason=fallback_reason,
         )
 
 
@@ -220,8 +260,17 @@ class GeminiExtractor:
         pdf_bytes: bytes,
         document_type_hint: DocumentType | None = None,
     ) -> ExtractionResult:
-        if not self.settings.llm_enabled or not self.settings.llm_model:
-            return self.fallback.extract(
+        if not self.settings.llm_enabled:
+            return self._fallback(
+                "no_api_key",
+                document_id=document_id,
+                filename=filename,
+                pdf_bytes=pdf_bytes,
+                document_type_hint=document_type_hint,
+            )
+        if not self.settings.llm_model:
+            return self._fallback(
+                "no_model",
                 document_id=document_id,
                 filename=filename,
                 pdf_bytes=pdf_bytes,
@@ -254,37 +303,103 @@ class GeminiExtractor:
                 if attempt == 0 and _is_retryable(exc):
                     time.sleep(0.25)
                     continue
-                break
+                return self._fallback(
+                    "invalid_output",
+                    error_class=type(exc).__name__,
+                    document_id=document_id,
+                    filename=filename,
+                    pdf_bytes=pdf_bytes,
+                    document_type_hint=document_type_hint,
+                )
             except (APIError, TimeoutError, TimeoutException) as exc:
                 if attempt == 0 and _is_retryable(exc):
                     time.sleep(0.25)
                     continue
-                break
+                reason = "timeout" if isinstance(exc, (TimeoutError, TimeoutException)) else (
+                    "rate_limited" if _status_code(exc) == 429 else "api_error"
+                )
+                return self._fallback(
+                    reason,
+                    error_class=type(exc).__name__,
+                    document_id=document_id,
+                    filename=filename,
+                    pdf_bytes=pdf_bytes,
+                    document_type_hint=document_type_hint,
+                )
+            except Exception as exc:  # noqa: BLE001 - SDK failures vary by transport and provider.
+                return self._fallback(
+                    "api_error",
+                    error_class=type(exc).__name__,
+                    document_id=document_id,
+                    filename=filename,
+                    pdf_bytes=pdf_bytes,
+                    document_type_hint=document_type_hint,
+                )
 
+        return self._fallback(
+            "api_error",
+            document_id=document_id,
+            filename=filename,
+            pdf_bytes=pdf_bytes,
+            document_type_hint=document_type_hint,
+        )
+
+    def _fallback(
+        self,
+        reason: str,
+        *,
+        error_class: str = "ConfigurationError",
+        document_id: str,
+        filename: str,
+        pdf_bytes: bytes,
+        document_type_hint: DocumentType | None,
+    ) -> ExtractionResult:
+        logger.warning(
+            "Gemini extraction fallback reason=%s error_class=%s",
+            reason,
+            error_class,
+        )
         try:
             return self.fallback.extract(
                 document_id=document_id,
                 filename=filename,
                 pdf_bytes=pdf_bytes,
                 document_type_hint=document_type_hint,
+                fallback_reason=reason,
             )
         except ValueError as exc:
-            raise ExtractionError(str(exc)) from exc
+            raise ExtractionError(str(exc), fallback_reason=reason) from exc
 
 
 def _is_retryable(error: Exception) -> bool:
     if isinstance(error, TimeoutError) or "timeout" in type(error).__name__.casefold():
         return True
+    status = _status_code(error)
+    return status == 429 or isinstance(status, int) and 500 <= status < 600
+
+
+def _status_code(error: Exception) -> int | None:
     status = getattr(error, "status_code", None)
     if status is None:
         status = getattr(getattr(error, "response", None), "status_code", None)
     if status is None:
         status = getattr(error, "code", None)
-    return status == 429 or isinstance(status, int) and 500 <= status < 600
+    return status if isinstance(status, int) else None
+
+
+def log_gemini_startup() -> None:
+    global _startup_logged
+    if _startup_logged:
+        return
+    settings = get_settings()
+    logger.info(
+        "Gemini extraction enabled=%s model=%s",
+        settings.llm_enabled and bool(settings.llm_model),
+        settings.llm_model or "<unset>",
+    )
+    _startup_logged = True
 
 
 def get_document_extractor() -> DocumentExtractor:
     settings = get_settings()
-    if settings.llm_enabled and settings.llm_model:
-        return GeminiExtractor(settings)
-    return FallbackExtractor()
+    return GeminiExtractor(settings)
