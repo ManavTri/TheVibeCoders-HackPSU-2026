@@ -11,7 +11,7 @@ from app.db.repositories import (
 )
 from app.schemas.documents import DocumentStatus, FinancialDocument
 from app.schemas.validation import ValidationReport, ValidationRequest
-from app.services.validation.engine import validate_documents
+from app.services.validation.evaluate import evaluate_findings
 
 router = APIRouter(prefix="/validations", tags=["validations"])
 
@@ -24,7 +24,7 @@ def create_validation(
     request = request or ValidationRequest()
     user_id = current_user_id(user)
     if request.document_ids is None:
-        records = list_documents(user_id)
+        records = list_documents(user_id, state="all")
     else:
         document_ids = [str(document_id) for document_id in request.document_ids]
         if len(set(document_ids)) != len(document_ids):
@@ -42,7 +42,7 @@ def create_validation(
             detail="At least two successfully extracted documents are required to validate.",
         )
     documents = [FinancialDocument.model_validate(record) for record in records]
-    findings = validate_documents(documents)
+    findings = evaluate_findings(documents)
     return create_validation_run(user_id, documents, findings)
 
 

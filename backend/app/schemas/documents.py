@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -35,6 +36,9 @@ class DocumentRecord(FinancialDocument):
     status: DocumentStatus
     created_at: datetime
     extraction_error: str | None = None
+    archived_at: datetime | None = None
+    deleted_at: datetime | None = None
+    state: Literal["active", "archived", "deleted"] = "active"
 
 
 class DocumentCorrection(BaseModel):

@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from decimal import Decimal
+from threading import RLock
 from typing import Any
 from uuid import uuid4
 
@@ -13,6 +14,25 @@ from app.schemas.validation import Finding, ValidationReport
 _documents: dict[str, dict[str, Any]] = {}
 _document_files: dict[str, bytes] = {}
 _runs: dict[str, ValidationReport] = {}
+_memory_lock = RLock()
+
+
+class DuplicateDocumentError(Exception):
+    def __init__(self, existing: dict[str, Any]):
+        self.existing = existing
+        super().__init__("This file has already been uploaded.")
+
+
+class InvalidDocumentStateError(Exception):
+    pass
+
+
+def _document_state(row: dict[str, Any]) -> str:
+    if row.get("deleted_at") is not None:
+        return "deleted"
+    if row.get("archived_at") is not None:
+        return "archived"
+    return "active"
 
 
 def _client() -> Client | None:
@@ -51,30 +71,81 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
         "status": row["status"],
         "created_at": row["created_at"],
         "extraction_error": extracted.get("extraction_error"),
+        "archived_at": row.get("archived_at"),
+        "deleted_at": row.get("deleted_at"),
+        "state": _document_state(row),
         "extracted_text": "",
     }
 
 
-def create_document(user_id: str, filename: str, document_type: DocumentType, content: bytes) -> dict[str, Any]:
+def find_document_by_hash(user_id: str, content_sha256: str) -> dict[str, Any] | None:
+    client = _client()
+    if client is None:
+        with _memory_lock:
+            row = next(
+                (
+                    row
+                    for row in _documents.values()
+                    if row["user_id"] == user_id and row.get("content_sha256") == content_sha256
+                ),
+                None,
+            )
+        return _record(row) if row else None
+    response = (
+        client.table("documents")
+        .select("*")
+        .eq("user_id", user_id)
+        .eq("content_sha256", content_sha256)
+        .limit(1)
+        .execute()
+    )
+    row = _first(response)
+    return _record(row) if row else None
+
+
+def create_document(
+    user_id: str,
+    filename: str,
+    document_type: DocumentType,
+    content: bytes,
+    content_sha256: str,
+) -> dict[str, Any]:
     document_id = str(uuid4())
     storage_path = f"{user_id}/{document_id}.pdf"
     settings = get_settings()
     client = _client()
     if client is None:
-        row = {
-            "id": document_id,
-            "user_id": user_id,
-            "filename": filename,
-            "type": document_type.value,
-            "storage_path": storage_path,
-            "status": DocumentStatus.UPLOADED.value,
-            "extracted_json": {"document_type": document_type.value},
-            "created_at": datetime.now(UTC).isoformat(),
-        }
-        _documents[document_id] = row
-        _document_files[document_id] = content
+        with _memory_lock:
+            existing = next(
+                (
+                    row
+                    for row in _documents.values()
+                    if row["user_id"] == user_id and row.get("content_sha256") == content_sha256
+                ),
+                None,
+            )
+            if existing:
+                raise DuplicateDocumentError(_record(existing))
+            row = {
+                "id": document_id,
+                "user_id": user_id,
+                "filename": filename,
+                "type": document_type.value,
+                "storage_path": storage_path,
+                "status": DocumentStatus.UPLOADED.value,
+                "extracted_json": {"document_type": document_type.value},
+                "content_sha256": content_sha256,
+                "archived_at": None,
+                "deleted_at": None,
+                "created_at": datetime.now(UTC).isoformat(),
+            }
+            _documents[document_id] = row
+            _document_files[document_id] = content
         return _record(row)
 
+    existing = find_document_by_hash(user_id, content_sha256)
+    if existing:
+        raise DuplicateDocumentError(existing)
     bucket = client.storage.from_(settings.supabase_storage_bucket)
     bucket.upload(storage_path, content, {"content-type": "application/pdf", "upsert": "false"})
     try:
@@ -89,13 +160,18 @@ def create_document(user_id: str, filename: str, document_type: DocumentType, co
                     "storage_path": storage_path,
                     "status": DocumentStatus.UPLOADED.value,
                     "extracted_json": {"document_type": document_type.value},
+                    "content_sha256": content_sha256,
                 }
             )
             .select("*")
             .execute()
         )
-    except Exception:
+    except Exception as exc:
         bucket.remove([storage_path])
+        if getattr(exc, "code", None) == "23505":
+            existing = find_document_by_hash(user_id, content_sha256)
+            if existing:
+                raise DuplicateDocumentError(existing) from exc
         raise
     row = _first(response)
     if row is None:
@@ -121,11 +197,20 @@ def get_document(user_id: str, document_id: str) -> dict[str, Any] | None:
     return _record(row) if row else None
 
 
-def list_documents(user_id: str) -> list[dict[str, Any]]:
+def list_documents(user_id: str, state: str = "active") -> list[dict[str, Any]]:
     client = _client()
     if client is None:
-        rows = [row for row in _documents.values() if row["user_id"] == user_id]
-        return [_record(row) for row in sorted(rows, key=lambda item: item["created_at"], reverse=True)]
+        with _memory_lock:
+            rows = [
+                row
+                for row in _documents.values()
+                if row["user_id"] == user_id
+                and (state == "all" or _document_state(row) == state)
+            ]
+            return [
+                _record(row)
+                for row in sorted(rows, key=lambda item: item["created_at"], reverse=True)
+            ]
     response = (
         client.table("documents")
         .select("*")
@@ -133,7 +218,106 @@ def list_documents(user_id: str) -> list[dict[str, Any]]:
         .order("created_at", desc=True)
         .execute()
     )
-    return [_record(row) for row in response.data]
+    return [
+        _record(row)
+        for row in response.data
+        if state == "all" or _document_state(row) == state
+    ]
+
+
+def archive_document(user_id: str, document_id: str) -> dict[str, Any] | None:
+    client = _client()
+    if client is None:
+        with _memory_lock:
+            row = _documents.get(document_id)
+            if row is None or row["user_id"] != user_id:
+                return None
+            if row.get("deleted_at") is not None:
+                raise InvalidDocumentStateError("Deleted documents cannot be archived.")
+            if row.get("archived_at") is None:
+                row["archived_at"] = datetime.now(UTC).isoformat()
+            return _record(row)
+    existing = get_document(user_id, document_id)
+    if existing is None:
+        return None
+    if existing["state"] == "deleted":
+        raise InvalidDocumentStateError("Deleted documents cannot be archived.")
+    if existing["state"] == "archived":
+        return existing
+    response = (
+        client.table("documents")
+        .update({"archived_at": datetime.now(UTC).isoformat()})
+        .eq("id", document_id)
+        .eq("user_id", user_id)
+        .is_("deleted_at", "null")
+        .select("*")
+        .execute()
+    )
+    row = _first(response)
+    return _record(row) if row else None
+
+
+def restore_document(user_id: str, document_id: str) -> dict[str, Any] | None:
+    client = _client()
+    if client is None:
+        with _memory_lock:
+            row = _documents.get(document_id)
+            if row is None or row["user_id"] != user_id:
+                return None
+            row["archived_at"] = None
+            row["deleted_at"] = None
+            return _record(row)
+    response = (
+        client.table("documents")
+        .update({"archived_at": None, "deleted_at": None})
+        .eq("id", document_id)
+        .eq("user_id", user_id)
+        .select("*")
+        .execute()
+    )
+    row = _first(response)
+    return _record(row) if row else None
+
+
+def soft_delete_document(user_id: str, document_id: str) -> dict[str, Any] | None:
+    client = _client()
+    if client is None:
+        with _memory_lock:
+            row = _documents.get(document_id)
+            if row is None or row["user_id"] != user_id:
+                return None
+            if row.get("deleted_at") is None:
+                row["deleted_at"] = datetime.now(UTC).isoformat()
+            return _record(row)
+    existing = get_document(user_id, document_id)
+    if existing is None:
+        return None
+    if existing["state"] == "deleted":
+        return existing
+    response = (
+        client.table("documents")
+        .update({"deleted_at": datetime.now(UTC).isoformat()})
+        .eq("id", document_id)
+        .eq("user_id", user_id)
+        .select("*")
+        .execute()
+    )
+    row = _first(response)
+    return _record(row) if row else None
+
+
+def get_current_findings(user_id: str) -> list[Finding]:
+    from app.services.validation.evaluate import evaluate_findings
+
+    records = [
+        record
+        for record in list_documents(user_id, state="active")
+        if record["status"] == DocumentStatus.EXTRACTED.value
+    ]
+    if len(records) < 2:
+        return []
+    documents = [FinancialDocument.model_validate(record) for record in records]
+    return evaluate_findings(documents)
 
 
 def update_document(

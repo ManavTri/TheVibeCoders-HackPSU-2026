@@ -1,4 +1,5 @@
-from typing import Annotated
+import hashlib
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
@@ -6,12 +7,18 @@ from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, 
 from app.api.deps import CurrentUser, current_user_id
 from app.core.config import get_settings
 from app.db.repositories import (
+    DuplicateDocumentError,
+    InvalidDocumentStateError,
+    archive_document,
     correct_document,
     create_document,
     delete_document,
     download_document,
+    find_document_by_hash,
     get_document,
     list_documents,
+    restore_document,
+    soft_delete_document,
     update_document,
 )
 from app.schemas.documents import (
@@ -42,7 +49,14 @@ async def upload_document(
         raise HTTPException(status_code=413, detail=f"File exceeds the {get_settings().max_upload_mb} MB upload limit.")
 
     user_id = current_user_id(user)
-    record = create_document(user_id, filename, document_type, content)
+    content_sha256 = hashlib.sha256(content).hexdigest()
+    existing = find_document_by_hash(user_id, content_sha256)
+    if existing:
+        raise _duplicate_document_response(existing)
+    try:
+        record = create_document(user_id, filename, document_type, content, content_sha256)
+    except DuplicateDocumentError as exc:
+        raise _duplicate_document_response(exc.existing) from exc
     try:
         text = extract_text(content)
         extracted = extract_document(
@@ -75,8 +89,40 @@ async def upload_document(
 
 
 @router.get("", response_model=list[DocumentRecord])
-def get_documents(user: CurrentUser) -> list[DocumentRecord]:
-    return [DocumentRecord.model_validate(record) for record in list_documents(current_user_id(user))]
+def get_documents(
+    user: CurrentUser, state: Literal["active", "archived", "deleted"] = "active"
+) -> list[DocumentRecord]:
+    return [
+        DocumentRecord.model_validate(record)
+        for record in list_documents(current_user_id(user), state=state)
+    ]
+
+
+@router.post("/{document_id}/archive", response_model=DocumentRecord)
+def archive_document_route(document_id: UUID, user: CurrentUser) -> DocumentRecord:
+    try:
+        updated = archive_document(current_user_id(user), str(document_id))
+    except InvalidDocumentStateError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return DocumentRecord.model_validate(updated)
+
+
+@router.post("/{document_id}/restore", response_model=DocumentRecord)
+def restore_document_route(document_id: UUID, user: CurrentUser) -> DocumentRecord:
+    updated = restore_document(current_user_id(user), str(document_id))
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return DocumentRecord.model_validate(updated)
+
+
+@router.post("/{document_id}/delete", response_model=DocumentRecord)
+def soft_delete_document_route(document_id: UUID, user: CurrentUser) -> DocumentRecord:
+    updated = soft_delete_document(current_user_id(user), str(document_id))
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return DocumentRecord.model_validate(updated)
 
 
 @router.get("/{document_id}", response_model=DocumentRecord)
@@ -108,3 +154,20 @@ def get_document_file(document_id: UUID, user: CurrentUser) -> Response:
     if content is None:
         raise HTTPException(status_code=404, detail="Document not found.")
     return Response(content=content, media_type="application/pdf")
+
+
+def _duplicate_document_response(existing: dict[str, Any]) -> HTTPException:
+    state = existing["state"]
+    message = f"This file was already uploaded as '{existing['filename']}' ({state})."
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "duplicate_document",
+            "message": message,
+            "existing": {
+                "id": existing["id"],
+                "filename": existing["filename"],
+                "state": state,
+            },
+        },
+    )
