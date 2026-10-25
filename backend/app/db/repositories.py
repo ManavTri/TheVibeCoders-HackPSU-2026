@@ -8,7 +8,12 @@ from uuid import uuid4
 
 from app.core.config import get_settings
 from app.db.supabase import Client, get_supabase_client
-from app.schemas.documents import DocumentStatus, DocumentType, FinancialDocument
+from app.schemas.documents import (
+    DocumentStatus,
+    DocumentType,
+    FinancialDocument,
+    display_category,
+)
 from app.schemas.validation import Finding, ValidationReport
 
 _documents: dict[str, dict[str, Any]] = {}
@@ -57,11 +62,13 @@ def _document_fields(document: FinancialDocument) -> dict[str, Any]:
 
 def _record(row: dict[str, Any]) -> dict[str, Any]:
     extracted = row.get("extracted_json") or {}
+    document_type = extracted.get("document_type", row["type"])
     return {
         "id": row["id"],
         "user_id": row["user_id"],
         "filename": row["filename"],
-        "document_type": extracted.get("document_type", row["type"]),
+        "document_type": document_type,
+        "category": display_category(document_type),
         "amount": extracted.get("amount"),
         "currency": extracted.get("currency", "USD"),
         "term": extracted.get("term"),
@@ -71,6 +78,12 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
         "status": row["status"],
         "created_at": row["created_at"],
         "extraction_error": extracted.get("extraction_error"),
+        "extraction_source": extracted.get("extraction_source"),
+        "type_confidence": extracted.get("type_confidence"),
+        "type_detected": extracted.get("type_detected"),
+        "needs_review": extracted.get("needs_review", False),
+        "user_edited_fields": extracted.get("user_edited_fields", []),
+        "extraction_envelope": extracted.get("envelope"),
         "archived_at": row.get("archived_at"),
         "deleted_at": row.get("deleted_at"),
         "state": _document_state(row),
@@ -106,12 +119,14 @@ def find_document_by_hash(user_id: str, content_sha256: str) -> dict[str, Any] |
 def create_document(
     user_id: str,
     filename: str,
-    document_type: DocumentType,
+    document_type: DocumentType | None,
     content: bytes,
     content_sha256: str,
 ) -> dict[str, Any]:
     document_id = str(uuid4())
     storage_path = f"{user_id}/{document_id}.pdf"
+    initial_type = document_type or DocumentType.OTHER
+    edited_fields = ["document_type"] if document_type else []
     settings = get_settings()
     client = _client()
     if client is None:
@@ -130,10 +145,13 @@ def create_document(
                 "id": document_id,
                 "user_id": user_id,
                 "filename": filename,
-                "type": document_type.value,
+                "type": initial_type.value,
                 "storage_path": storage_path,
                 "status": DocumentStatus.UPLOADED.value,
-                "extracted_json": {"document_type": document_type.value},
+                "extracted_json": {
+                    "document_type": initial_type.value,
+                    "user_edited_fields": edited_fields,
+                },
                 "content_sha256": content_sha256,
                 "archived_at": None,
                 "deleted_at": None,
@@ -155,11 +173,14 @@ def create_document(
                 {
                     "id": document_id,
                     "user_id": user_id,
-                    "type": document_type.value,
+                    "type": initial_type.value,
                     "filename": filename,
                     "storage_path": storage_path,
                     "status": DocumentStatus.UPLOADED.value,
-                    "extracted_json": {"document_type": document_type.value},
+                    "extracted_json": {
+                        "document_type": initial_type.value,
+                        "user_edited_fields": edited_fields,
+                    },
                     "content_sha256": content_sha256,
                 }
             )
@@ -326,21 +347,58 @@ def update_document(
     extracted: FinancialDocument,
     status: DocumentStatus,
     extraction_error: str | None = None,
+    extraction_metadata: dict[str, Any] | None = None,
+    preserve_user_edits: bool = False,
 ) -> dict[str, Any] | None:
-    client = _client()
+    existing = get_document(user_id, document_id)
+    if existing is None:
+        return None
+
+    previous_extracted = FinancialDocument.model_validate(existing)
     extracted_json = _document_fields(extracted)
+    edited_fields = list(existing.get("user_edited_fields", []))
+    if preserve_user_edits:
+        previous_fields = _document_fields(previous_extracted)
+        for field_name in edited_fields:
+            if field_name in previous_fields:
+                extracted_json[field_name] = previous_fields[field_name]
+
+    metadata = extraction_metadata or {}
+    extracted_json.update(
+        {
+            "envelope": metadata.get("envelope", existing.get("extraction_envelope")),
+            "extraction_source": metadata.get(
+                "extraction_source", existing.get("extraction_source")
+            ),
+            "type_confidence": metadata.get(
+                "type_confidence", existing.get("type_confidence")
+            ),
+            "type_detected": metadata.get("type_detected", existing.get("type_detected")),
+            "needs_review": metadata.get("needs_review", existing.get("needs_review", False)),
+            "user_edited_fields": edited_fields,
+        }
+    )
+    client = _client()
     if extraction_error:
         extracted_json["extraction_error"] = extraction_error
     if client is None:
-        row = _documents.get(document_id)
-        if row is None or row["user_id"] != user_id:
-            return None
-        row["status"] = status.value
-        row["extracted_json"] = extracted_json
-        return _record(row)
+        with _memory_lock:
+            row = _documents.get(document_id)
+            if row is None or row["user_id"] != user_id:
+                return None
+            row["type"] = extracted_json["document_type"]
+            row["status"] = status.value
+            row["extracted_json"] = extracted_json
+            return _record(row)
     response = (
         client.table("documents")
-        .update({"status": status.value, "extracted_json": extracted_json})
+        .update(
+            {
+                "type": extracted_json["document_type"],
+                "status": status.value,
+                "extracted_json": extracted_json,
+            }
+        )
         .eq("id", document_id)
         .eq("user_id", user_id)
         .select("*")
@@ -360,12 +418,27 @@ def correct_document(
     updated = document.model_copy(update=corrections)
     client = _client()
     extracted_json = _document_fields(updated)
+    extracted_json.update(
+        {
+            "envelope": existing.get("extraction_envelope"),
+            "extraction_source": existing.get("extraction_source"),
+            "type_confidence": existing.get("type_confidence"),
+            "type_detected": existing.get("type_detected"),
+            "needs_review": existing.get("needs_review", False),
+            "user_edited_fields": sorted(
+                set(existing.get("user_edited_fields", [])) | set(corrections)
+            ),
+        }
+    )
     if client is None:
-        row = _documents[document_id]
-        row["type"] = updated.document_type.value
-        row["extracted_json"] = extracted_json
-        row["status"] = DocumentStatus.EXTRACTED.value
-        return _record(row)
+        with _memory_lock:
+            row = _documents.get(document_id)
+            if row is None or row["user_id"] != user_id:
+                return None
+            row["type"] = updated.document_type.value
+            row["extracted_json"] = extracted_json
+            row["status"] = DocumentStatus.EXTRACTED.value
+            return _record(row)
     response = (
         client.table("documents")
         .update(

@@ -1,8 +1,19 @@
 import hashlib
+import logging
+from time import perf_counter
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Response,
+    UploadFile,
+    status,
+)
 
 from app.api.deps import CurrentUser, current_user_id
 from app.core.config import get_settings
@@ -28,17 +39,23 @@ from app.schemas.documents import (
     DocumentType,
     FinancialDocument,
 )
-from app.services.extraction.client import extract_text
-from app.services.extraction.extractor import extract_document
+from app.services.extraction.extractor import (
+    DocumentExtractor,
+    ExtractionError,
+    ExtractionResult,
+    get_document_extractor,
+)
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("", response_model=DocumentRecord, status_code=status.HTTP_201_CREATED)
 async def upload_document(
     user: CurrentUser,
     file: Annotated[UploadFile, File()],
-    document_type: Annotated[DocumentType, Form()],
+    extractor: Annotated[DocumentExtractor, Depends(get_document_extractor)],
+    document_type: Annotated[DocumentType | None, Form()] = None,
 ) -> DocumentRecord:
     filename = file.filename or "statement.pdf"
     if file.content_type != "application/pdf" and not filename.lower().endswith(".pdf"):
@@ -57,35 +74,91 @@ async def upload_document(
         record = create_document(user_id, filename, document_type, content, content_sha256)
     except DuplicateDocumentError as exc:
         raise _duplicate_document_response(exc.existing) from exc
+
+    return _extract_and_save(
+        user_id=user_id,
+        record=record,
+        filename=filename,
+        pdf_bytes=content,
+        extractor=extractor,
+        document_type_override=document_type,
+        preserve_user_edits=True,
+    )
+
+
+def _extract_and_save(
+    *,
+    user_id: str,
+    record: dict[str, Any],
+    filename: str,
+    pdf_bytes: bytes,
+    extractor: DocumentExtractor,
+    document_type_override: DocumentType | None = None,
+    preserve_user_edits: bool,
+) -> DocumentRecord:
+    started_at = perf_counter()
+    document_id = record["id"]
     try:
-        text = extract_text(content)
-        extracted = extract_document(
-            document_id=record["id"],
+        result = extractor.extract(
+            document_id=document_id,
             filename=filename,
-            document_type=document_type,
-            text=text,
+            pdf_bytes=pdf_bytes,
+            document_type_override=document_type_override,
         )
-    except ValueError as exc:
-        extracted = FinancialDocument(
-            id=record["id"],
+    except (ExtractionError, ValueError) as exc:
+        duration_ms = round((perf_counter() - started_at) * 1000)
+        logger.warning(
+            "Document extraction failed document_id=%s duration_ms=%d source=fallback error_class=%s",
+            document_id,
+            duration_ms,
+            type(exc).__name__,
+        )
+        failed_document = FinancialDocument(
+            id=document_id,
             filename=filename,
-            document_type=document_type,
+            document_type=document_type_override or DocumentType.OTHER,
         )
         updated = update_document(
             user_id,
-            record["id"],
-            extracted,
+            document_id,
+            failed_document,
             DocumentStatus.FAILED,
             extraction_error=str(exc),
+            extraction_metadata={"extraction_source": "fallback", "needs_review": True},
+            preserve_user_edits=preserve_user_edits,
         )
         if updated is None:
             raise RuntimeError("Uploaded document disappeared before extraction status could be saved.")
         return DocumentRecord.model_validate(updated)
 
-    updated = update_document(user_id, record["id"], extracted, DocumentStatus.EXTRACTED)
+    duration_ms = round((perf_counter() - started_at) * 1000)
+    logger.info(
+        "Document extraction complete document_id=%s duration_ms=%d source=%s",
+        document_id,
+        duration_ms,
+        result.extraction_source,
+    )
+    updated = update_document(
+        user_id,
+        document_id,
+        result.document,
+        DocumentStatus.EXTRACTED,
+        extraction_metadata=_extraction_metadata(result),
+        preserve_user_edits=preserve_user_edits,
+    )
     if updated is None:
         raise RuntimeError("Uploaded document disappeared before extraction results could be saved.")
     return DocumentRecord.model_validate(updated)
+
+
+def _extraction_metadata(result: ExtractionResult) -> dict[str, Any]:
+    return {
+        "envelope": result.envelope.model_dump(mode="json"),
+        "extraction_source": result.extraction_source,
+        "type_confidence": result.type_confidence,
+        "type_detected": result.type_detected.value,
+        "needs_review": result.needs_review,
+    }
 
 
 @router.get("", response_model=list[DocumentRecord])
@@ -139,6 +212,29 @@ def patch_document(document_id: UUID, correction: DocumentCorrection, user: Curr
     if updated is None:
         raise HTTPException(status_code=404, detail="Document not found.")
     return DocumentRecord.model_validate(updated)
+
+
+@router.post("/{document_id}/reextract", response_model=DocumentRecord)
+def reextract_document(
+    document_id: UUID,
+    user: CurrentUser,
+    extractor: Annotated[DocumentExtractor, Depends(get_document_extractor)],
+) -> DocumentRecord:
+    user_id = current_user_id(user)
+    record = get_document(user_id, str(document_id))
+    if record is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    content = download_document(user_id, str(document_id))
+    if content is None:
+        raise HTTPException(status_code=404, detail="Document file not found.")
+    return _extract_and_save(
+        user_id=user_id,
+        record=record,
+        filename=record["filename"],
+        pdf_bytes=content,
+        extractor=extractor,
+        preserve_user_edits=True,
+    )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

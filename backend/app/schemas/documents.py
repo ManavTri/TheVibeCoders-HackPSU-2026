@@ -100,6 +100,7 @@ class DocumentRecord(FinancialDocument):
     type_detected: DocumentType | None = None
     needs_review: bool = False
     user_edited_fields: list[str] = Field(default_factory=list)
+    extraction_envelope: dict[str, object] | None = None
     archived_at: datetime | None = None
     deleted_at: datetime | None = None
     state: Literal["active", "archived", "deleted"] = "active"
