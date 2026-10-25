@@ -14,6 +14,8 @@ from app.core.auth import current_user
 from app.db.repositories import get_current_ledger
 from app.main import app
 from app.services.ai import agent
+from app.services.validation import engine
+from app.services.validation.rules.base import ValidationConfig
 
 SAMPLE = (
     Path(__file__).resolve().parents[2]
@@ -180,6 +182,40 @@ def test_single_tool_read_uses_boilerplate_instead_of_second_model_call(
     assert "current inconsistencies" in response.json()["reply"]
     assert len(fake.models.calls) == 1
     assert response.json()["sources"] == []
+
+
+def test_findings_tool_marks_results_incomplete_when_a_rule_is_skipped(
+    client, monkeypatch
+) -> None:
+    upload(client)
+    upload(
+        client,
+        "tuition.pdf",
+        path=SAMPLE.parent / "tuition_bill.pdf",
+        document_type="tuition_bill",
+    )
+
+    def failing_rule(_context):
+        raise RuntimeError("private document text")
+
+    monkeypatch.setattr(
+        engine,
+        "RULES",
+        (engine.RuleDefinition("test.failing_rule", failing_rule), *engine.RULES),
+    )
+    monkeypatch.setattr(
+        engine,
+        "_default_validation_config",
+        lambda: ValidationConfig(strict=False),
+    )
+
+    result = agent._execute_read_tool("local-demo", "get_findings", {}, {})
+
+    assert result["checks_incomplete"] is True
+    assert result["status_message"] == "Some validation checks could not be completed."
+    assert result["rule_errors"] == [
+        {"rule_id": "test.failing_rule", "error_class": "RuntimeError"}
+    ]
 
 
 def test_tools_never_read_another_users_document(client, monkeypatch) -> None:

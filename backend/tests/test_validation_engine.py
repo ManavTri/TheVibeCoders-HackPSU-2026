@@ -1,4 +1,6 @@
+import importlib
 import json
+import pkgutil
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -6,10 +8,11 @@ from pathlib import Path
 import pytest
 
 from app.db.repositories import _finding_from_row
-from app.schemas.documents import FinancialDocument
+from app.schemas.documents import ExtractionEnvelope, FinancialDocument
 from app.schemas.validation import Severity
 from app.services.validation import engine
 from app.services.validation.evaluate import evaluate_findings
+from app.services.validation.rules import base as rule_base
 
 FIXTURE_PATH = Path(__file__).parent / "fixtures" / "term_ledger_scenarios.json"
 TODAY = date(2026, 7, 1)
@@ -139,7 +142,7 @@ def test_same_input_has_stable_order_and_ids() -> None:
     ]
 
 
-def test_one_rule_exception_does_not_break_other_rules(monkeypatch) -> None:
+def test_strict_validation_reraises_rule_exception(monkeypatch) -> None:
     scenario = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))["scenarios"][0]
     documents = [_document(item) for item in scenario["documents"]]
 
@@ -153,9 +156,84 @@ def test_one_rule_exception_does_not_break_other_rules(monkeypatch) -> None:
         (engine.RuleDefinition("test.failing_rule", failing_rule), *original),
     )
 
-    findings = evaluate_findings(documents, today=TODAY, include_all=True)
+    with pytest.raises(RuntimeError, match="fixture error"):
+        evaluate_findings(
+            documents,
+            today=TODAY,
+            include_all=True,
+            config=rule_base.ValidationConfig(strict=True),
+        )
 
+
+def test_non_strict_validation_records_rule_errors_and_continues(monkeypatch, caplog) -> None:
+    scenario = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))["scenarios"][0]
+    documents = [_document(item) for item in scenario["documents"]]
+
+    def failing_rule(_context):
+        raise RuntimeError("document content must not appear in logs")
+
+    original = engine.RULES
+    monkeypatch.setattr(
+        engine,
+        "RULES",
+        (engine.RuleDefinition("test.failing_rule", failing_rule), *original),
+    )
+    errors: list[dict[str, str]] = []
+
+    findings = evaluate_findings(
+        documents,
+        today=TODAY,
+        include_all=True,
+        config=rule_base.ValidationConfig(strict=False),
+        rule_errors=errors,
+    )
+
+    assert errors == [{"rule_id": "test.failing_rule", "error_class": "RuntimeError"}]
     assert any(finding.rule_id == "coverage.term_gap" for finding in findings)
+    assert "ERROR" in caplog.text
+    assert "test.failing_rule" in caplog.text
+    assert "RuntimeError" in caplog.text
+    assert "document content must not appear in logs" not in caplog.text
+
+
+def test_all_validation_rule_modules_and_registered_rules_run_strictly() -> None:
+    rules_package = importlib.import_module("app.services.validation.rules")
+    for module in pkgutil.iter_modules(
+        rules_package.__path__, f"{rules_package.__name__}."
+    ):
+        importlib.import_module(module.name)
+
+    scenario_dir = (
+        Path(__file__).resolve().parents[2]
+        / "sample_docs"
+        / "scenario_3_two_term_demo"
+        / "envelopes"
+    )
+    documents = []
+    for envelope_path in sorted(scenario_dir.glob("*.json")):
+        envelope = json.loads(envelope_path.read_text(encoding="utf-8"))
+        parsed = ExtractionEnvelope.model_validate(envelope)
+        documents.append(
+            FinancialDocument(
+                id=envelope_path.stem,
+                filename=f"{envelope_path.stem}.pdf",
+                document_type=parsed.document_type,
+                amount=parsed.total_amount,
+                currency=parsed.currency or "USD",
+                term=parsed.term,
+                deadline=min((item.date for item in parsed.deadlines), default=None),
+                required_credits=parsed.required_credits,
+                extraction_envelope=parsed.model_dump(mode="json"),
+            )
+        )
+
+    assert len(documents) == 6
+    evaluate_findings(
+        documents,
+        today=date(2026, 10, 25),
+        include_all=True,
+        config=rule_base.ValidationConfig(strict=True),
+    )
 
 
 def test_legacy_saved_finding_without_details_still_loads() -> None:

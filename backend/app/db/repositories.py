@@ -357,6 +357,7 @@ def get_current_findings(
     *,
     include_all: bool = False,
     today: date | None = None,
+    rule_errors: list[dict[str, str]] | None = None,
 ) -> list[Finding]:
     from app.services.validation.evaluate import evaluate_findings
 
@@ -367,6 +368,7 @@ def get_current_findings(
         documents,
         today=today or date.today(),
         include_all=include_all,
+        rule_errors=rule_errors,
     )
 
 

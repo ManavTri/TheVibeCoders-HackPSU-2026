@@ -35,6 +35,7 @@ class ValidationConfig:
     calendar: AcademicCalendar = field(default_factory=AcademicCalendar)
     llm_enabled: bool = False
     rule_assist_enabled: bool = False
+    strict: bool = False
     assist: RuleAssist = field(default_factory=NullAssist)
 
 

@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from app.core.auth import current_user
 from app.core.config import Settings
 from app.main import app
+from app.services.validation import engine
+from app.services.validation.rules.base import ValidationConfig
 
 SAMPLES = Path(__file__).resolve().parents[2] / "sample_docs" / "scenario_1_mismatch"
 
@@ -58,6 +60,34 @@ def test_documents_validations_and_insights_flow(client: TestClient) -> None:
     insights = client.post("/api/insights", json={"run_id": report["id"]}).json()
     assert insights["report_id"] == report["id"]
     assert insights["recommendations"]
+
+
+def test_findings_report_exposes_skipped_rule_errors(client: TestClient, monkeypatch) -> None:
+    upload_pair(client)
+
+    def failing_rule(_context):
+        raise RuntimeError("private document text")
+
+    monkeypatch.setattr(
+        engine,
+        "RULES",
+        (engine.RuleDefinition("test.failing_rule", failing_rule), *engine.RULES),
+    )
+    monkeypatch.setattr(
+        engine,
+        "_default_validation_config",
+        lambda: ValidationConfig(strict=False),
+    )
+
+    report = client.get("/api/findings/report")
+    findings = client.get("/api/findings?include=all")
+
+    assert report.status_code == 200
+    assert report.json()["summary"]["rule_errors"] == [
+        {"rule_id": "test.failing_rule", "error_class": "RuntimeError"}
+    ]
+    assert report.json()["summary"]["skipped_rules"] == 1
+    assert findings.headers["X-Rules-Skipped"] == "1"
 
 
 def test_duplicate_upload_returns_existing_document(client: TestClient) -> None:

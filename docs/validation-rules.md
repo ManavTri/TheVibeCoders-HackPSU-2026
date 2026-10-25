@@ -7,6 +7,15 @@ extracted documents, an immutable-by-convention ledger read model, an injected
 do not use the wall clock. Dates and amounts not present in source documents
 are not invented. Cross-currency totals are never added together.
 
+Rule exceptions are isolated in production by default: a failing rule is logged
+at `ERROR` with its rule ID, exception class, and traceback, and is recorded in
+`summary.rule_errors`/`summary.skipped_rules` on `GET /findings/report`. The
+`GET /findings` response also reports the skipped count in `X-Rules-Skipped`
+when applicable. Consumers, including the chat findings tool, must treat a
+result with skipped rules as incomplete. Set `ValidationConfig(strict=True)` to
+re-raise rule exceptions. The test suite enables strict mode by default so rule
+defects fail tests rather than silently dropping findings.
+
 For billed balances, tuition bills are authoritative: only their charges,
 posted aid credits, and received payments affect term net balances. Award
 letters and aid packages are references used for comparisons; a missing award

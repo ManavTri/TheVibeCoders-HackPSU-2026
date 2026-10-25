@@ -1,4 +1,5 @@
 import logging
+import traceback
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
@@ -79,13 +80,29 @@ MAX_DEFAULT_FINDINGS = 20
 MAX_DEFAULT_INFO_FINDINGS = 3
 
 
+def _default_validation_config() -> ValidationConfig:
+    settings = get_settings()
+    return ValidationConfig(
+        llm_enabled=settings.llm_enabled,
+        rule_assist_enabled=settings.llm_enabled and settings.rule_assist_enabled,
+    )
+
+
 def validate_documents(
     documents: list[FinancialDocument],
     *,
     today: date | None = None,
     include_all: bool = False,
+    config: ValidationConfig | None = None,
+    rule_errors: list[dict[str, str]] | None = None,
 ) -> list[Finding]:
-    return evaluate_findings(documents, today=today, include_all=include_all)
+    return evaluate_findings(
+        documents,
+        today=today,
+        include_all=include_all,
+        config=config,
+        rule_errors=rule_errors,
+    )
 
 
 def evaluate_findings(
@@ -94,14 +111,11 @@ def evaluate_findings(
     today: date | None = None,
     include_all: bool = False,
     config: ValidationConfig | None = None,
+    rule_errors: list[dict[str, str]] | None = None,
 ) -> list[Finding]:
     """Normalize, ledger, and evaluate documents without reading or writing persistence."""
     evaluation_date = today if today is not None else date(2000, 1, 1)
-    settings = get_settings() if config is None else None
-    rules_config = config or ValidationConfig(
-        llm_enabled=bool(settings and settings.llm_enabled),
-        rule_assist_enabled=bool(settings and settings.llm_enabled and settings.rule_assist_enabled),
-    )
+    rules_config = config or _default_validation_config()
     ledger = build_ledger(
         documents,
         today=evaluation_date,
@@ -112,8 +126,22 @@ def evaluate_findings(
     for rule in RULES:
         try:
             findings.extend(rule.check(context))
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Validation rule %s skipped (%s)", rule.id, type(exc).__name__)
+        except Exception as exc:
+            if rules_config.strict:
+                raise
+            error_class = type(exc).__name__
+            if rule_errors is not None:
+                rule_errors.append({"rule_id": rule.id, "error_class": error_class})
+            stack = "".join(
+                f'  File "{frame.filename}", line {frame.lineno}, in {frame.name}\n'
+                for frame in traceback.extract_tb(exc.__traceback__)
+            )
+            logger.error(
+                "Validation rule %s skipped (%s)\n%s",
+                rule.id,
+                error_class,
+                stack,
+            )
     findings = _post_process(findings, evaluation_date, rules_config)
     if not include_all:
         info_count = 0

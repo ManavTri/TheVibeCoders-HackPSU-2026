@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
 from app.api.deps import CurrentUser, current_user_id
 from app.db.repositories import get_current_findings, get_current_ledger
@@ -19,16 +19,21 @@ router = APIRouter(prefix="/findings", tags=["findings"])
 @router.get("", response_model=list[Finding])
 def current_findings(
     user: CurrentUser,
+    response: Response,
     term: str | None = None,
     severity: Severity | None = None,
     category: str | None = None,
     include: Literal["default", "all"] = "default",
 ) -> list[Finding]:
+    rule_errors: list[dict[str, str]] = []
     findings = get_current_findings(
         current_user_id(user),
         include_all=include == "all",
         today=date.today(),
+        rule_errors=rule_errors,
     )
+    if rule_errors:
+        response.headers["X-Rules-Skipped"] = str(len(rule_errors))
     if term is not None:
         findings = [finding for finding in findings if finding.term == term]
     if severity is not None:
@@ -41,7 +46,13 @@ def current_findings(
 @router.get("/report")
 def findings_report(user: CurrentUser) -> dict:
     user_id = current_user_id(user)
-    findings = get_current_findings(user_id, include_all=True, today=date.today())
+    rule_errors: list[dict[str, str]] = []
+    findings = get_current_findings(
+        user_id,
+        include_all=True,
+        today=date.today(),
+        rule_errors=rule_errors,
+    )
     visible = _limit_info(findings)
     counts = Counter(finding.severity.value for finding in findings)
     at_risk: dict[str, Decimal] = defaultdict(Decimal)
@@ -91,6 +102,8 @@ def findings_report(user: CurrentUser) -> dict:
             },
             "earliest_action_deadline": min(deadlines, default=None),
             "per_term_headlines": per_term,
+            "rule_errors": rule_errors,
+            "skipped_rules": len(rule_errors),
         },
     }
 
