@@ -70,13 +70,17 @@ All API paths are prefixed by `/api`.
 | `POST` | `/documents/{id}/restore` | Restore an archived or soft-deleted document |
 | `POST` | `/documents/{id}/delete` | Soft-delete a document without removing its file |
 | `DELETE` | `/documents/{id}` | Permanently delete the private file and document row |
-| `GET` | `/findings` | Compute current findings from active, successfully extracted documents |
+| `GET` | `/findings?term=&severity=&category=&include=all` | Compute and filter findings from active, successfully extracted documents; the default limits informational findings |
+| `GET` | `/findings/report` | Return current findings and a severity/at-risk/deadline/per-term summary |
+| `GET` | `/ledger` | Return per-term and total charges, aid, payments, balances, estimates, and provenance |
 | `POST` | `/validations` | Validate all extracted user documents or the supplied `document_ids` |
 | `GET` | `/validations/{run_id}` | Load a saved validation report |
 | `POST` | `/insights` | Create a student-oriented summary from `{ "run_id": "..." }` |
 | `POST` | `/ai/chat` | Ask the authenticated user's financial planning assistant; returns reply, suggestions, sources, and pending write actions |
 | `POST` | `/ai/actions/{id}/confirm` | Explicitly confirm a pending archive, restore, correction, re-extraction, or recheck action |
 | `POST` | `/ai/actions/{id}/cancel` | Cancel a pending AI-proposed write action |
+
+Validation normalizes academic terms and builds a deterministic ledger before applying the rules. Study-abroad quotes and cost estimates are kept separate from billed charges, and totals are never combined across currencies. See [`docs/term-model.md`](docs/term-model.md) and [`docs/validation-rules.md`](docs/validation-rules.md).
 
 The upload UI performs a validation using only the newly uploaded, successfully extracted documents. After a student corrects a field on a report, the app calls `PATCH /documents/{id}`, starts a new validation run, and opens the refreshed report.
 The chat assistant does not persist conversation history. Common document lists, findings, deadlines, summaries, and help responses use local templates without Gemini; only open-ended questions require backend-only `LLM_API_KEY` and `LLM_MODEL`. Single-tool answers also avoid an extra model round trip. Edits, re-extraction, and validation rechecks require explicit confirmation. Chat requests are limited to 20 per user per 10 minutes, and action confirmations/cancellations to 10 per 10 minutes; the backend also caps pending actions. See [`docs/agent-design.md`](docs/agent-design.md) for details.
@@ -92,7 +96,7 @@ The chat assistant does not persist conversation history. Common document lists,
 
 ## Synthetic demo data
 
-Use only PDFs under `sample_docs/`. Scenario 1 intentionally disagrees on term, deadline, and credits. Scenario 2 pairs a scholarship with a study-abroad quote. Each scenario's `expected.json` lists the expected rule IDs. The PDFs are synthetic and contain no real student data.
+Use only PDFs under `sample_docs/`. Scenario 1 deliberately puts an award and bill in different terms; the ledger analyzes them separately rather than flagging a term difference by itself. Scenario 2 pairs a scholarship with a study-abroad estimate. Each scenario's `expected.json` lists expected findings and findings that should not appear. The PDFs are synthetic and contain no real student data.
 
 ## Data, safety, and limitations
 
@@ -100,6 +104,7 @@ Use only PDFs under `sample_docs/`. Scenario 1 intentionally disagrees on term, 
 - Uploaded PDFs are stored in a private bucket, scoped under the authenticated user's ID. The backend checks ownership and deletes the Storage object as part of document deletion.
 - The API uses a server-only Supabase service key; Supabase Auth access tokens are verified server-side. Production mode refuses to start without auth and Supabase configuration.
 - When `LLM_API_KEY` and `LLM_MODEL` are configured, the backend sends the PDF bytes to Gemini for one structured classification-and-extraction call. Gemini failures, timeouts, rate limits, server errors, and invalid responses fall back to the local PDF text parser. Without an API key/model, the parser is used directly. Image-only PDFs fail extraction; OCR is not implemented.
+- The term-aware ledger uses explicitly extracted line items and schedule details. Amount-only legacy documents are supported with low confidence; unknown terms are not silently assigned to a term, and unitemized multi-term figures are kept in `annual_unallocated`.
 - Gemini receives PDF bytes separately from its instructions; PDF text is treated as untrusted data. Prompts prohibit extracting SSNs, bank/card numbers, government IDs, student IDs, and home addresses. The application does not store extracted PDF text or log the model output. Review Google's API data-handling terms before sending real financial documents.
 - Insight summaries are deterministic rules-based prompts; no document text is sent to an LLM.
 - Use synthetic data for demos and development. Real financial records need a reviewed retention, deletion, backup, incident-response, and compliance policy before launch.
