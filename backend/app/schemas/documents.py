@@ -2,7 +2,7 @@ from datetime import date as Date
 from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -120,6 +120,7 @@ class FinancialDocument(BaseModel):
     deadline: Date | None = None
     required_credits: int | None = Field(default=None, ge=0)
     extracted_text: str = Field(default="", exclude=True)
+    extraction_envelope: dict[str, Any] | None = None
 
 
 class DocumentRecord(FinancialDocument):
@@ -134,7 +135,6 @@ class DocumentRecord(FinancialDocument):
     type_detected: DocumentType | None = None
     needs_review: bool = False
     user_edited_fields: list[str] = Field(default_factory=list)
-    extraction_envelope: dict[str, object] | None = None
     archived_at: datetime | None = None
     deleted_at: datetime | None = None
     state: Literal["active", "archived", "deleted"] = "active"

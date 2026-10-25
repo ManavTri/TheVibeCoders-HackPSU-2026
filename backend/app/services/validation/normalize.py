@@ -228,9 +228,6 @@ def assign_item_term(
     if item_term:
         parsed = parse_terms(item_term).terms
         return TermAssignment(parsed[0] if len(parsed) == 1 else Term.unknown())
-    if document_term:
-        parsed = parse_terms(document_term).terms
-        return TermAssignment(parsed[0] if len(parsed) == 1 else Term.unknown())
     terms = [
         term
         for raw_term in (document_terms or [])
@@ -239,6 +236,11 @@ def assign_item_term(
     ]
     if len(set(terms)) > 1:
         return TermAssignment(None, annual_unallocated=True)
+    if document_term:
+        parsed = parse_terms(document_term).terms
+        if len(parsed) > 1:
+            return TermAssignment(None, annual_unallocated=True)
+        return TermAssignment(parsed[0])
     if terms:
         return TermAssignment(terms[0])
     if item_date:
