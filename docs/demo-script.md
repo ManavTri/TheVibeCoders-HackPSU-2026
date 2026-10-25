@@ -1,28 +1,29 @@
 # Three-minute judge demo
 
-Use the provided synthetic PDFs only. For a local demo, leave backend Supabase settings unset (development uses an in-memory repository and local-demo identity) and use the synthetic files. For a deployed demo, sign in with a dedicated test account and upload the same synthetic files.
+Use only the synthetic PDFs in `sample_docs/`. The live demo is available at [makemuni.us](https://www.makemuni.us). Sign in with the prepared test account if prompted.
 
-## Before the demo
+## Demo flow
 
-1. Start the API from `backend/`: `python -m uvicorn app.main:app --reload`.
-2. Run the checkout from Ubuntu's filesystem (not `/mnt/c`), and ensure `node` and `npm` resolve to Linux installations (Node.js 22+). Install frontend dependencies once from the repo root with `make frontend-install`, then start it with `make frontend`. If reinstalling dependencies, stop Vite first because `npm ci` replaces `node_modules`.
-3. Open `http://localhost:5173` (or the deployed Vercel demo URL).
-4. If using the deployed demo, sign in with the prepared test account. Never use real student financial data.
+**0:00 to 0:30: The problem.**
 
-## Script (3 minutes)
+“Documents look funi? Save your muni! Students coordinate award letters, tuition bills, and program quotes from different sources. Muni puts those documents together and surfaces questions worth asking.”
 
-**0:00–0:30 — Problem.** “Documents look funi? Save your muni! Students coordinate award letters, tuition bills, and program quotes from different sources. Muni puts those documents together and surfaces questions worth asking.”
+**0:30 to 1:00: Upload.**
 
-**0:30–1:00 — Upload.** Click **Check my documents** and add `sample_docs/scenario_1_mismatch/award_letter.pdf` and `tuition_bill.pdf`. Leave the optional type hints blank to show automatic classification, then click **Upload and review**. Review the Gemini-detected types and extracted fields; correct any field if needed, then click **Check these documents**.
+Upload `sample_docs/scenario_1_mismatch/award_letter.pdf` and `tuition_bill.pdf`. Leave the type hints blank to show automatic classification. Review the extracted types and fields, then continue to the check.
 
-**1:00–1:35 — Explain the report.** Show the mismatched academic terms, due dates, and credit requirements. Point to the finding IDs, severity levels, compared fields, and suggested follow-up actions. Explain that the app prompts verification; it does not determine eligibility.
+**1:00 to 1:35: Explain the report.**
 
-**1:35–2:15 — Correction is part of the workflow.** On the upload review screen, change a detected type or extracted term/credits and save before checking. On the report, correct a field and save; the app persists the correction, runs validation again, and opens the new report.
+Show the mismatched terms, due dates, and credit requirements. Point out the evidence, severity, and suggested next step for each finding. Emphasize that Muni helps students verify details and does not decide eligibility.
 
-**2:15–2:40 — Manage documents.** Return to the overview to show the per-user document library and delete control. Explain that documents are stored in a private bucket, protected by user-scoped access, and can be deleted.
+**1:35 to 2:15: Correct a field.**
 
-**2:40–3:00 — Responsible scope.** “Only synthetic documents in this demo. When configured, Gemini classifies and extracts explicitly stated fields; otherwise the local parser is used. Image-only PDFs need OCR. The insight summary is deterministic, not financial or eligibility advice.”
+Change an extracted term or credit value, save it, and run the check again. Show that the correction is retained and the report refreshes.
 
-## Study-abroad scenario
+**2:15 to 2:40: Ask the assistant.**
 
-Upload the synthetic scholarship letter and study-abroad quote in `sample_docs/scenario_2_study_abroad/`. The expected JSON records the date and credit-rule prompts. Amounts for study-abroad quotes are not currently compared as tuition bills.
+Ask Muni to summarize the current findings or explain one of them. Show that the response cites the student's documents. If the assistant proposes a change, the user must confirm it.
+
+**2:40 to 3:00: Close.**
+
+Show the private document library and the delete control. Mention that the demo uses synthetic data, Gemini is optional, and the insight summary is deterministic.
