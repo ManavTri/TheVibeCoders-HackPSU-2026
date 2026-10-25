@@ -13,6 +13,8 @@ def isolate_backend_settings(monkeypatch):
         "SUPABASE_URL": "",
         "SUPABASE_SERVICE_KEY": "",
         "SUPABASE_JWT_SECRET": "",
+        "LLM_API_KEY": "",
+        "LLM_MODEL": "",
     }.items():
         monkeypatch.setenv(name, value)
     get_settings.cache_clear()
@@ -27,6 +29,8 @@ def client(monkeypatch) -> TestClient:
         "SUPABASE_URL": "",
         "SUPABASE_SERVICE_KEY": "",
         "SUPABASE_JWT_SECRET": "",
+        "LLM_API_KEY": "",
+        "LLM_MODEL": "",
     }.items():
         monkeypatch.setenv(name, value)
     get_settings.cache_clear()

@@ -66,7 +66,7 @@ class ExtractionEnvelope(BaseModel):
     document_date: Date | None = None
     total_amount: Decimal | None = Field(default=None, ge=0)
     required_credits: int | None = Field(default=None, ge=0)
-    min_gpa: Decimal | None = Field(default=None, ge=0, le=4)
+    min_gpa: Decimal | None = Field(default=None, ge=0)
     deadlines: list[DeadlineItem] = Field(default_factory=list)
     line_items: list[LineItem] = Field(default_factory=list)
     disbursements: list[Disbursement] = Field(default_factory=list)

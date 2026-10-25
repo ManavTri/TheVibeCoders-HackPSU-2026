@@ -64,6 +64,12 @@ def configured_gemini(responses: list[str | Exception]) -> GeminiExtractor:
     )
 
 
+def test_llm_is_enabled_only_for_a_nonempty_key() -> None:
+    assert Settings().llm_enabled is False
+    assert Settings(llm_api_key="  ").llm_enabled is False
+    assert Settings(llm_api_key="test-key").llm_enabled is True
+
+
 def test_gemini_envelope_populates_typed_document_and_legacy_fields() -> None:
     envelope = make_envelope()
     extractor = configured_gemini([envelope.model_dump_json()])
