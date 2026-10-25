@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { DocumentCorrection, DocumentRecord, DocumentType, Insights, ValidationReport } from '../types/api'
+import type { CurrentFindingsReport, DocumentCorrection, DocumentRecord, DocumentType, Insights, ValidationReport } from '../types/api'
 
 const configuredUrl = import.meta.env.VITE_API_URL as string | undefined
 if (!configuredUrl && import.meta.env.PROD) {
@@ -62,6 +62,10 @@ export function createValidation(documentIds: string[]): Promise<ValidationRepor
 
 export function getReport(id: string): Promise<ValidationReport> {
   return request<ValidationReport>(`/validations/${encodeURIComponent(id)}`)
+}
+
+export function getCurrentFindingsReport(): Promise<CurrentFindingsReport> {
+  return request<CurrentFindingsReport>('/findings/report')
 }
 
 export function getInsights(runId: string): Promise<Insights> {

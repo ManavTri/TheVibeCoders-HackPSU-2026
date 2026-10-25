@@ -4,12 +4,13 @@ import { SectionCard } from './components/SectionCard'
 import { Sidebar } from './components/Sidebar'
 import { StatCard } from './components/StatCard'
 import { FinancialChat } from './components/FinancialChat'
+import { IncompleteChecksBanner } from './components/IncompleteChecksBanner'
 import {
   archiveDocument,
   correctDocument,
   createInsights,
   createValidation,
-  getCurrentFindings,
+  getCurrentFindingsReport,
   getDocumentPdf,
   getDocuments,
   getValidation,
@@ -64,12 +65,13 @@ function fetchUserData() {
     getDocuments('active'),
     getDocuments('archived'),
     getDocuments('deleted'),
-    getCurrentFindings(),
-  ]).then(([active, archived, deleted, currentFindings]) => ({
+    getCurrentFindingsReport(),
+  ]).then(([active, archived, deleted, findingsReport]) => ({
     active,
     archived,
     deleted,
-    currentFindings,
+    currentFindings: findingsReport.findings,
+    skippedRules: findingsReport.summary.skipped_rules,
   }))
 }
 
@@ -176,6 +178,7 @@ function App() {
   const [authLoading, setAuthLoading] = useState(Boolean(supabase))
   const [documents, setDocuments] = useState({ active: [], archived: [], deleted: [] })
   const [findings, setFindings] = useState([])
+  const [skippedRules, setSkippedRules] = useState(0)
   const [selectedState, setSelectedState] = useState('active')
   const [selectedDocument, setSelectedDocument] = useState(null)
   const [pdfPreview, setPdfPreview] = useState({ documentId: '', url: '' })
@@ -213,6 +216,7 @@ function App() {
       if (!nextSession) {
         setDocuments({ active: [], archived: [], deleted: [] })
         setFindings([])
+        setSkippedRules(0)
       }
     })
     return () => {
@@ -227,6 +231,7 @@ function App() {
       setError('')
       setDocuments({ active: data.active, archived: data.archived, deleted: data.deleted })
       setFindings(data.currentFindings)
+      setSkippedRules(data.skippedRules)
       return data
     } catch (cause) {
       setError(errorText(cause, 'Could not load your financial documents.'))
@@ -461,6 +466,7 @@ function App() {
         </div>
         <div className="grid gap-6 xl:grid-cols-[1.2fr_0.8fr]">
           <SectionCard title="Current document findings" subtitle="Computed on read from active extracted documents" action={<button className="text-xs text-slate-300 underline" type="button" onClick={() => setActivePage('Financial Insights')}>Open insights</button>}>
+            <IncompleteChecksBanner skippedRules={skippedRules} />
             {findings.length ? <div className="space-y-3">{findings.slice(0, 4).map((finding) => (
               <article key={finding.id} className="rounded-xl border border-slate-800 bg-[#0f141a] p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-medium text-white">{finding.title}</h3><span className="rounded-full bg-slate-800 px-2.5 py-1 text-[10px] uppercase tracking-wider text-slate-300">{finding.severity}</span></div>
@@ -524,6 +530,7 @@ function App() {
             <div className="grid gap-3 md:grid-cols-2">{report.documents.map((document) => <div key={document.id} className="rounded-xl border border-slate-800 bg-[#0f141a] p-4"><p className="truncate font-medium text-white">{document.filename}</p><p className="mt-2 text-xs text-slate-400">{typeLabel(document.document_type)} · {document.term || 'Term not found'} · {formatMoney(document.amount, document.currency)}</p></div>)}</div>
           </SectionCard>
           <SectionCard title="Findings to review" subtitle="Potential inconsistencies; confirm details with your school or provider">
+            <IncompleteChecksBanner skippedRules={skippedRules} />
             {report.findings.length ? <div className="space-y-3">{report.findings.map((finding) => <article key={finding.id} className="rounded-xl border border-slate-800 bg-[#0f141a] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><h3 className="font-semibold text-white">{finding.title}</h3><span className="rounded-full bg-slate-800 px-2.5 py-1 text-[10px] uppercase text-slate-300">{finding.severity}</span></div><p className="mt-2 text-sm leading-6 text-slate-300">{finding.explanation}</p><p className="mt-2 text-xs text-slate-400">Suggested action: {finding.suggested_action}</p></article>)}</div>
               : <p className="text-sm text-slate-400">No potential inconsistencies were detected in the extracted fields.</p>}
           </SectionCard>

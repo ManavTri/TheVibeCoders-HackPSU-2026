@@ -1,6 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { DocumentCorrectionForm } from '../components/DocumentCorrectionForm'
 import { FindingCard } from '../components/FindingCard'
+import { IncompleteChecksBanner } from '../components/IncompleteChecksBanner'
 import { InsightsPanel } from '../components/InsightsPanel'
 import { SideBySideViewer } from '../components/SideBySideViewer'
 import { correctDocument, createValidation } from '../lib/api'
@@ -9,7 +10,7 @@ import type { DocumentType } from '../types/api'
 
 export function Report() {
   const { id = '' } = useParams()
-  const { report, insights, error } = useReport(id)
+  const { report, insights, currentFindingsReport, error } = useReport(id)
   const navigate = useNavigate()
 
   async function saveCorrection(documentId: string, correction: {
@@ -40,6 +41,7 @@ export function Report() {
         <div className="correction-list">{report.documents.map((document) => <DocumentCorrectionForm key={document.id} document={document} onSave={saveCorrection} />)}</div>
       </section>
       <section className="report-section findings-section"><div className="section-title"><div><div className="eyebrow">WHAT CAUGHT OUR EYE</div><h2>Worth a second look</h2></div><span>Potential mismatches, not financial advice</span></div>
+        <IncompleteChecksBanner skippedRules={currentFindingsReport?.summary.skipped_rules ?? 0} />
         {report.findings.length > 0 ? <div className="finding-list">{report.findings.map((finding, index) => <FindingCard key={`${finding.rule_id}-${index}`} finding={finding} index={index} />)}</div> : <div className="empty-findings"><span>✓</span><div><b>No potential inconsistencies found.</b><p>We could not detect a conflict in the fields we read. Missing fields may still need manual review.</p></div></div>}
       </section>
       <section className="report-section"><InsightsPanel insights={insights} /></section>

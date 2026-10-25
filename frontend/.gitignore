@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+.tsupgrader/runtime-validation/standalone-result.json

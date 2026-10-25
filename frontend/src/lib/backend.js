@@ -48,8 +48,8 @@ export function getDocuments(state = 'active') {
   return requestJson(`/documents?state=${encodeURIComponent(state)}`)
 }
 
-export function getCurrentFindings() {
-  return requestJson('/findings')
+export function getCurrentFindingsReport() {
+  return requestJson('/findings/report')
 }
 
 export function sendChatMessage(message, history = []) {
