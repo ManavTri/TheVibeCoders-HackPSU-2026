@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173"
     max_upload_mb: int = 10
     require_auth: bool = False
+    auth0_domain: str | None = None
+    auth0_audience: str | None = None
     supabase_url: str | None = None
     supabase_service_key: str | None = None
     supabase_jwt_secret: str | None = None
