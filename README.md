@@ -37,7 +37,7 @@ Provider accounts and secrets are not available in this workspace, so the deploy
 
 ## Local development
 
-Requirements: Python 3.11+, Node.js 22+, npm. Local API mode uses in-memory repositories if Supabase credentials are absent. For authenticated local development, configure a Supabase project and copy the app-specific env examples.
+Requirements: Python 3.11+, Node.js 22+ and npm installed inside Ubuntu/WSL. Keep the checkout and `node_modules` on the Ubuntu filesystem (for example, `~/Code/TheVibeCoders-HackPSU-2026`), not under `/mnt/c`; Windows-mounted folders can lock Windows-native packages and make even Linux `npm ci` fail. The Make targets reject Windows Node/npm inherited through WSL's PATH. Local API mode uses in-memory repositories if Supabase credentials are absent. For authenticated local development, configure a Supabase project and copy the app-specific env examples.
 
 ```bash
 # Terminal 1 — backend (WSL/Linux)
@@ -45,18 +45,17 @@ cd backend
 python -m pip install -e ".[test]"
 python -m uvicorn app.main:app --reload
 
-# Terminal 2 — frontend (install dependencies once; do not reinstall while Vite is running)
+# Terminal 2 — frontend
 cd frontend
 npm ci
 npm run dev
 ```
 
 Alternatively, from the repository root run `make frontend-install` once, then
-`make frontend` to start the dev server. `make frontend` deliberately does not
-run `npm ci` on every launch: `npm ci` removes and recreates `node_modules`,
-which can fail on Windows/WSL when a running Node/Vite process holds its native
-Rolldown binary open. Stop the existing frontend server before running
-`make frontend-install` again after dependency changes.
+`make frontend` to start the dev server. `make frontend` does not reinstall
+dependencies. Stop the frontend server before running `make frontend-install`
+again after dependency changes because `npm ci` removes and recreates
+`node_modules`.
 
 Open `http://localhost:5173`; backend health is at `http://localhost:8000/health`, and API docs are at `http://localhost:8000/docs`.
 

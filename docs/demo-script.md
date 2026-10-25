@@ -5,7 +5,7 @@ Use the provided synthetic PDFs only. For a local demo, leave backend Supabase s
 ## Before the demo
 
 1. Start the API from `backend/`: `python -m uvicorn app.main:app --reload`.
-2. Install frontend dependencies once from the repo root with `make frontend-install`, then start it with `make frontend` (or run `npm ci` then `npm run dev` from `frontend/`). Do not rerun `npm ci` while a Vite server is running; stop it first.
+2. Run the checkout from Ubuntu's filesystem (not `/mnt/c`), and ensure `node` and `npm` resolve to Linux installations (Node.js 22+). Install frontend dependencies once from the repo root with `make frontend-install`, then start it with `make frontend`. If reinstalling dependencies, stop Vite first because `npm ci` replaces `node_modules`.
 3. Open `http://localhost:5173` (or the deployed Vercel demo URL).
 4. If using the deployed demo, sign in with the prepared test account. Never use real student financial data.
 
