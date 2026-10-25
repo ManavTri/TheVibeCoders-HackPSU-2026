@@ -56,6 +56,10 @@ occurs until the same authenticated user calls
 removes the action before execution so it is single-use, then invokes the
 user-scoped repository operation. The agent can propose at most one write per
 chat request, and each user can have at most three outstanding actions.
+Repeated identical proposals reuse the existing server-side confirmation ID.
+While an action is pending, the frontend pauses new submissions and hides
+suggested prompts; it displays the action card instead of the model's separate
+conversational confirmation question.
 `POST /api/ai/actions/{id}/cancel` discards the action. Unknown or other-user
 IDs return 404; expired actions return 410.
 
@@ -88,9 +92,9 @@ or introduce shared server-side state before scaling out.
   output-token and wall-clock caps, per-user chat/action rate limits, one
   pending write proposal per chat, a three-action outstanding cap, and one
   concurrent chat per user bound the agent's work. The frontend applies a
-  matching 20-per-10-minute local chat limit for usability and keeps the
-  conversation mounted while navigating between app pages; backend limits
-  remain authoritative.
+  matching 20-per-10-minute local chat limit for usability, prevents repeated
+  submits synchronously, and keeps the conversation mounted while navigating
+  between app pages. Backend limits remain authoritative.
 - **Logging:** logs include tool names, durations, and user identifiers only.
   They never include user messages, document content, model output, exception
   details, or credentials.

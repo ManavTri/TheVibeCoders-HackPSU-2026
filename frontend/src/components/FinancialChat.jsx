@@ -37,6 +37,9 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
   const [notice, setNotice] = useState('')
   const requestTimes = useRef([])
   const messageList = useRef(null)
+  const requestInFlight = useRef(false)
+  const actionInFlight = useRef(false)
+  const pendingActionRef = useRef([])
 
   useEffect(() => {
     messageList.current?.scrollTo({ top: messageList.current.scrollHeight, behavior: 'smooth' })
@@ -44,7 +47,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
 
   async function send(text) {
     const nextMessage = text.trim()
-    if (!nextMessage || busy) return
+    if (!nextMessage || requestInFlight.current || pendingActionRef.current.length > 0) return
     const now = currentTimeMs()
     requestTimes.current = requestTimes.current.filter((time) => now - time < CHAT_WINDOW_MS)
     if (requestTimes.current.length >= CHAT_LIMIT) {
@@ -52,6 +55,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
       return
     }
     requestTimes.current.push(now)
+    requestInFlight.current = true
 
     const history = messages.slice(-12).map((turn) => ({
       role: turn.role,
@@ -64,26 +68,38 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
     setNotice('')
     try {
       const response = await sendChatMessage(nextMessage, history)
-      setMessages((current) => [
-        ...current,
-        { role: 'assistant', content: response.reply, sources: response.sources || [] },
-      ])
-      setPendingActions((current) => [...current, ...(response.pendingActions || [])])
-      setSuggestions(response.suggestions || [])
+      const nextActions = response.pendingActions || []
+      if (nextActions.length > 0) {
+        const knownIds = new Set(pendingActionRef.current.map((action) => action.id))
+        const uniqueActions = nextActions.filter((action) => !knownIds.has(action.id))
+        pendingActionRef.current = [...pendingActionRef.current, ...uniqueActions]
+        setPendingActions(pendingActionRef.current)
+      } else {
+        setMessages((current) => [
+          ...current,
+          { role: 'assistant', content: response.reply, sources: response.sources || [] },
+        ])
+        setSuggestions(response.suggestions || [])
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The chat request failed.')
+      setMessages((current) => current.slice(0, -1))
     } finally {
+      requestInFlight.current = false
       setBusy(false)
     }
   }
 
   async function confirmAction(action) {
+    if (actionInFlight.current) return
+    actionInFlight.current = true
     setBusyActionId(action.id)
     setError('')
     setNotice('')
     try {
       const result = await confirmChatAction(action.id)
-      setPendingActions((current) => current.filter((item) => item.id !== action.id))
+      pendingActionRef.current = pendingActionRef.current.filter((item) => item.id !== action.id)
+      setPendingActions(pendingActionRef.current)
       if (result.reportId) {
         await onRecheck(result.reportId)
       } else {
@@ -94,20 +110,25 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The action could not be completed.')
     } finally {
+      actionInFlight.current = false
       setBusyActionId('')
     }
   }
 
   async function cancelAction(action) {
+    if (actionInFlight.current) return
+    actionInFlight.current = true
     setBusyActionId(action.id)
     setError('')
     try {
       await cancelChatAction(action.id)
-      setPendingActions((current) => current.filter((item) => item.id !== action.id))
+      pendingActionRef.current = pendingActionRef.current.filter((item) => item.id !== action.id)
+      setPendingActions(pendingActionRef.current)
       setNotice('Pending action cancelled; no document changes were made.')
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'The action could not be cancelled.')
     } finally {
+      actionInFlight.current = false
       setBusyActionId('')
     }
   }
@@ -169,7 +190,7 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
                 onClick={() => void confirmAction(action)}
                 className="rounded-lg bg-emerald-800 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
               >
-                {busyActionId === action.id ? 'Working…' : '                Confirm this action'}
+                {busyActionId === action.id ? 'Working…' : 'Confirm this action'}
               </button>
               <button
                 type="button"
@@ -187,13 +208,13 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
       <div className="space-y-3 border-t border-slate-200 p-4 sm:p-5">
         {error && <p className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800" role="alert">{error}</p>}
         {notice && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800" role="status">{notice}</p>}
-        {suggestions.length > 0 && (
+        {pendingActions.length === 0 && suggestions.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {suggestions.map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
-                disabled={busy}
+                disabled={busy || pendingActions.length > 0}
                 onClick={() => void send(suggestion)}
                 className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-100 disabled:opacity-50"
               >
@@ -216,12 +237,13 @@ export function FinancialChat({ onDocumentsChanged, onRecheck }) {
             maxLength={2000}
             value={message}
             onChange={(event) => setMessage(event.target.value)}
+            disabled={busy || pendingActions.length > 0}
             placeholder="Ask about your documents, findings, or deadlines…"
             className="min-h-12 flex-1 resize-y rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-emerald-700 focus:ring-2 focus:ring-emerald-100"
           />
           <button
             type="submit"
-            disabled={busy || !message.trim()}
+            disabled={busy || pendingActions.length > 0 || !message.trim()}
             className="min-h-12 rounded-xl bg-emerald-800 px-5 py-3 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy ? 'Sending…' : 'Send'}

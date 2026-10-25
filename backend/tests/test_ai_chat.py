@@ -440,11 +440,31 @@ def test_recheck_is_confirmation_gated_and_returns_saved_report_id(
 
 def test_pending_write_action_cap(client) -> None:
     document = upload(client)
-    for _ in range(agent.MAX_PENDING_ACTIONS_PER_USER):
-        agent._make_pending_action("local-demo", "archive_document", {"id": document["id"]})
+    proposals = [
+        ("archive_document", {"id": document["id"]}),
+        ("restore_document", {"id": document["id"]}),
+        ("reextract_document", {"id": document["id"]}),
+    ]
+    for tool_name, args in proposals:
+        agent._make_pending_action("local-demo", tool_name, args)
 
     with pytest.raises(ValueError, match="Too many pending actions"):
-        agent._make_pending_action("local-demo", "archive_document", {"id": document["id"]})
+        agent._make_pending_action(
+            "local-demo",
+            "correct_document_field",
+            {"id": document["id"], "field": "term", "value": "Spring 2027"},
+        )
+
+
+def test_duplicate_pending_proposals_reuse_the_same_confirmation(client) -> None:
+    document = upload(client)
+    args = {"id": document["id"], "field": "term", "value": "Spring 2027"}
+
+    first = agent._make_pending_action("local-demo", "correct_document_field", args)
+    duplicate = agent._make_pending_action("local-demo", "correct_document_field", args)
+
+    assert duplicate.id == first.id
+    assert len(agent._pending_actions) == 1
 
 
 def test_confirm_cancel_action_rate_limit_is_separate(client) -> None:

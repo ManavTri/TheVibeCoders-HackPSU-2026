@@ -456,6 +456,24 @@ def _make_pending_action(
             if pending_action.expires_at <= now
         ]:
             _pending_actions.pop(expired_id, None)
+        duplicate = next(
+            (
+                action
+                for action in _pending_actions.values()
+                if action.user_id == user_id
+                and action.tool == tool_name
+                and action.args == normalized_args
+            ),
+            None,
+        )
+        if duplicate:
+            return PendingAction(
+                id=duplicate.id,
+                tool=duplicate.tool,
+                summary=summary,
+                args=duplicate.args,
+                preview=duplicate.preview,
+            )
         outstanding = sum(
             pending_action.user_id == user_id
             for pending_action in _pending_actions.values()
