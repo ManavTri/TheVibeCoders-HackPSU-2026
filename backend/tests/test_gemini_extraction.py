@@ -224,13 +224,13 @@ def upload(
     client: TestClient,
     content: bytes,
     filename: str = "statement.pdf",
-    document_type: str | None = None,
+    document_type_hint: str | None = None,
 ) -> dict:
     request = {
         "files": {"file": (filename, content, "application/pdf")},
     }
-    if document_type is not None:
-        request["data"] = {"document_type": document_type}
+    if document_type_hint is not None:
+        request["data"] = {"document_type_hint": document_type_hint}
     response = client.post("/api/documents", **request)
     assert response.status_code == 201
     return response.json()
@@ -257,18 +257,24 @@ def test_upload_auto_detects_type_and_marks_low_confidence_for_review(
     assert len(fake_models.calls) == 1
 
 
-def test_upload_type_override_is_kept_and_detected_type_is_recorded(
+def test_upload_type_hint_does_not_override_gemini_classification(
     client: TestClient, monkeypatch
 ) -> None:
-    route_gemini(monkeypatch, make_envelope(DocumentType.TUITION_BILL).model_dump_json())
+    fake_models = route_gemini(
+        monkeypatch,
+        make_envelope(DocumentType.TUITION_BILL).model_dump_json(),
+    )
     pdf = (SAMPLES / "scenario_1_mismatch" / "award_letter.pdf").read_bytes()
 
-    document = upload(client, pdf, document_type="award_letter")
+    document = upload(client, pdf, document_type_hint="award_letter")
 
-    assert document["document_type"] == "award_letter"
+    assert document["document_type"] == "tuition_bill"
     assert document["type_detected"] == "tuition_bill"
-    assert document["user_edited_fields"] == ["document_type"]
-    assert document["category"] == "Scholarship"
+    assert document["user_edited_fields"] == []
+    assert document["category"] == "Tuition"
+    instructions = fake_models.calls[0]["contents"][0]
+    assert "award_letter" in instructions
+    assert "only as a hint" in instructions
 
 
 def test_duplicate_upload_does_not_call_extractor_twice(

@@ -3,7 +3,12 @@ import type { DocumentType } from '../types/api'
 export const documentTypeLabels: Record<DocumentType, string> = {
   award_letter: 'Award letter',
   tuition_bill: 'Tuition bill',
+  financial_aid_package: 'Financial aid package',
   study_abroad_quote: 'Study-abroad quote',
+  loan_offer: 'Loan offer',
+  payment_plan: 'Payment plan',
+  housing_contract: 'Housing contract',
+  other: 'Other financial document',
 }
 
 export function formatMoney(amount: string | number | null, currency = 'USD'): string {

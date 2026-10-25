@@ -1,4 +1,12 @@
-export type DocumentType = 'award_letter' | 'tuition_bill' | 'study_abroad_quote'
+export type DocumentType =
+  | 'award_letter'
+  | 'tuition_bill'
+  | 'financial_aid_package'
+  | 'study_abroad_quote'
+  | 'loan_offer'
+  | 'payment_plan'
+  | 'housing_contract'
+  | 'other'
 export type DocumentStatus = 'uploaded' | 'extracted' | 'failed'
 export type Severity = 'error' | 'warning' | 'info'
 
@@ -11,6 +19,7 @@ export interface FinancialDocument {
   term: string | null
   deadline: string | null
   required_credits: number | null
+  extraction_envelope?: Record<string, unknown> | null
   extracted_text?: string
 }
 
@@ -18,6 +27,11 @@ export interface DocumentRecord extends FinancialDocument {
   status: DocumentStatus
   created_at: string
   extraction_error: string | null
+  extraction_source?: 'gemini' | 'fallback' | null
+  type_detected?: DocumentType | null
+  type_confidence?: number | null
+  needs_review?: boolean
+  user_edited_fields?: string[]
 }
 
 export type DocumentSummary = Pick<

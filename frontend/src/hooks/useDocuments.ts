@@ -1,23 +1,43 @@
 import { useState } from 'react'
 import { createValidation, uploadDocument } from '../lib/api'
-import type { DocumentType, ValidationReport } from '../types/api'
+import type { DocumentRecord, DocumentType, ValidationReport } from '../types/api'
+
+export interface UploadBatchResult {
+  documents: DocumentRecord[]
+  failedFiles: File[]
+}
 
 export function useDocuments() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
-  async function analyze(files: File[], documentTypes: DocumentType[]): Promise<ValidationReport | null> {
+  async function upload(files: File[], documentTypes: Array<DocumentType | null>): Promise<UploadBatchResult | null> {
     setBusy(true)
     setError('')
     try {
-      const documents = await Promise.all(
-        files.map((file, index) => uploadDocument(file, documentTypes[index])),
+      const results = await Promise.allSettled(
+        files.map((file, index) => uploadDocument(file, documentTypes[index] ?? undefined)),
       )
-      const extracted = documents.filter((document) => document.status === 'extracted')
-      if (extracted.length < 2) {
-        throw new Error('At least two PDFs need readable text before they can be compared. Failed uploads remain in your documents so you can review or delete them.')
+      const documents: DocumentRecord[] = []
+      const failedFiles: File[] = []
+      const failures: string[] = []
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          documents.push(result.value)
+          return
+        }
+
+        failedFiles.push(files[index])
+        failures.push(`${files[index].name}: ${result.reason instanceof Error
+          ? result.reason.message
+          : 'Upload failed.'}`)
+      })
+
+      if (failures.length > 0) {
+        setError(failures.join(' '))
       }
-      return await createValidation(extracted.map((document) => document.id))
+      return { documents, failedFiles }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Something went wrong while checking these documents.')
       return null
@@ -26,5 +46,18 @@ export function useDocuments() {
     }
   }
 
-  return { analyze, busy, error, setError }
+  async function validate(documentIds: string[]): Promise<ValidationReport | null> {
+    setBusy(true)
+    setError('')
+    try {
+      return await createValidation(documentIds)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Something went wrong while checking these documents.')
+      return null
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return { upload, validate, busy, error, setError }
 }

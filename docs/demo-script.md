@@ -13,11 +13,11 @@ Use the provided synthetic PDFs only. For a local demo, leave backend Supabase s
 
 **0:00–0:30 — Problem.** “Students coordinate award letters, tuition bills, and program quotes from different sources. ClearLedger puts those documents together and surfaces questions worth asking.”
 
-**0:30–1:00 — Upload.** Click **Check my documents**. Add `sample_docs/scenario_1_mismatch/award_letter.pdf` as **Award letter**, and `tuition_bill.pdf` as **Tuition bill**. Click **Analyze documents**.
+**0:30–1:00 — Upload.** Click **Check my documents** and add `sample_docs/scenario_1_mismatch/award_letter.pdf` and `tuition_bill.pdf`. Leave the optional type hints blank to show automatic classification, then click **Upload and review**. Review the Gemini-detected types and extracted fields; correct any field if needed, then click **Check these documents**.
 
 **1:00–1:35 — Explain the report.** Show the mismatched academic terms, due dates, and credit requirements. Point to the finding IDs, severity levels, compared fields, and suggested follow-up actions. Explain that the app prompts verification; it does not determine eligibility.
 
-**1:35–2:15 — Correction is part of the workflow.** Expand **Correct extracted fields** for one document, correct its term or credits to match the other statement, and save. The app persists the correction, runs validation again, and opens the new report.
+**1:35–2:15 — Correction is part of the workflow.** On the upload review screen, change a detected type or extracted term/credits and save before checking. On the report, correct a field and save; the app persists the correction, runs validation again, and opens the new report.
 
 **2:15–2:40 — Manage documents.** Return to the overview to show the per-user document library and delete control. Explain that documents are stored in a private bucket, protected by user-scoped access, and can be deleted.
 

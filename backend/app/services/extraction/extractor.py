@@ -62,7 +62,7 @@ class DocumentExtractor(Protocol):
         document_id: str,
         filename: str,
         pdf_bytes: bytes,
-        document_type_override: DocumentType | None = None,
+        document_type_hint: DocumentType | None = None,
     ) -> ExtractionResult: ...
 
 
@@ -104,7 +104,10 @@ def extract_document(
 
 
 def _legacy_document(
-    *, envelope: ExtractionEnvelope, document_id: str, filename: str, type_override: DocumentType | None
+    *,
+    envelope: ExtractionEnvelope,
+    document_id: str,
+    filename: str,
 ) -> FinancialDocument:
     due_dates = [
         item.date
@@ -114,7 +117,7 @@ def _legacy_document(
     return FinancialDocument(
         id=document_id,
         filename=filename,
-        document_type=type_override or envelope.document_type,
+        document_type=envelope.document_type,
         amount=envelope.total_amount,
         currency=envelope.currency or "USD",
         term=envelope.term,
@@ -128,7 +131,6 @@ def _result(
     *,
     document_id: str,
     filename: str,
-    document_type_override: DocumentType | None,
     source: str,
 ) -> ExtractionResult:
     return ExtractionResult(
@@ -136,7 +138,6 @@ def _result(
             envelope=envelope,
             document_id=document_id,
             filename=filename,
-            type_override=document_type_override,
         ),
         envelope=envelope,
         extraction_source=source,
@@ -172,7 +173,7 @@ class FallbackExtractor:
         document_id: str,
         filename: str,
         pdf_bytes: bytes,
-        document_type_override: DocumentType | None = None,
+        document_type_hint: DocumentType | None = None,
     ) -> ExtractionResult:
         text = extract_text(pdf_bytes)
         detected_type, confidence = _fallback_type(text)
@@ -195,7 +196,6 @@ class FallbackExtractor:
             envelope,
             document_id=document_id,
             filename=filename,
-            document_type_override=document_type_override,
             source="fallback",
         )
 
@@ -218,14 +218,14 @@ class GeminiExtractor:
         document_id: str,
         filename: str,
         pdf_bytes: bytes,
-        document_type_override: DocumentType | None = None,
+        document_type_hint: DocumentType | None = None,
     ) -> ExtractionResult:
         if not self.settings.llm_enabled or not self.settings.llm_model:
             return self.fallback.extract(
                 document_id=document_id,
                 filename=filename,
                 pdf_bytes=pdf_bytes,
-                document_type_override=document_type_override,
+                document_type_hint=document_type_hint,
             )
 
         if self.client is None:
@@ -235,7 +235,12 @@ class GeminiExtractor:
         client = self.client
         for attempt in range(2):
             try:
-                response_text = generate_envelope(client, self.settings.llm_model, pdf_bytes)
+                response_text = generate_envelope(
+                    client,
+                    self.settings.llm_model,
+                    pdf_bytes,
+                    document_type_hint.value if document_type_hint else None,
+                )
                 envelope = ExtractionEnvelope.model_validate(json.loads(response_text))
                 if len(envelope.summary) > 300:
                     raise ValueError("Gemini summary exceeded the 300 character limit.")
@@ -243,7 +248,6 @@ class GeminiExtractor:
                     envelope,
                     document_id=document_id,
                     filename=filename,
-                    document_type_override=document_type_override,
                     source="gemini",
                 )
             except (json.JSONDecodeError, ValidationError, ValueError) as exc:
@@ -262,7 +266,7 @@ class GeminiExtractor:
                 document_id=document_id,
                 filename=filename,
                 pdf_bytes=pdf_bytes,
-                document_type_override=document_type_override,
+                document_type_hint=document_type_hint,
             )
         except ValueError as exc:
             raise ExtractionError(str(exc)) from exc

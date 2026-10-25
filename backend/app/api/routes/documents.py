@@ -55,6 +55,7 @@ async def upload_document(
     user: CurrentUser,
     file: Annotated[UploadFile, File()],
     extractor: Annotated[DocumentExtractor, Depends(get_document_extractor)],
+    document_type_hint: Annotated[DocumentType | None, Form()] = None,
     document_type: Annotated[DocumentType | None, Form()] = None,
 ) -> DocumentRecord:
     filename = file.filename or "statement.pdf"
@@ -65,13 +66,16 @@ async def upload_document(
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"File exceeds the {get_settings().max_upload_mb} MB upload limit.")
 
+    if document_type_hint and document_type and document_type_hint != document_type:
+        raise HTTPException(status_code=422, detail="Provide only one document type hint.")
+    type_hint = document_type_hint or document_type
     user_id = current_user_id(user)
     content_sha256 = hashlib.sha256(content).hexdigest()
     existing = find_document_by_hash(user_id, content_sha256)
     if existing:
         raise _duplicate_document_response(existing)
     try:
-        record = create_document(user_id, filename, document_type, content, content_sha256)
+        record = create_document(user_id, filename, None, content, content_sha256)
     except DuplicateDocumentError as exc:
         raise _duplicate_document_response(exc.existing) from exc
 
@@ -81,7 +85,7 @@ async def upload_document(
         filename=filename,
         pdf_bytes=content,
         extractor=extractor,
-        document_type_override=document_type,
+        document_type_hint=type_hint,
         preserve_user_edits=True,
     )
 
@@ -93,7 +97,7 @@ def _extract_and_save(
     filename: str,
     pdf_bytes: bytes,
     extractor: DocumentExtractor,
-    document_type_override: DocumentType | None = None,
+    document_type_hint: DocumentType | None = None,
     preserve_user_edits: bool,
 ) -> DocumentRecord:
     started_at = perf_counter()
@@ -103,7 +107,7 @@ def _extract_and_save(
             document_id=document_id,
             filename=filename,
             pdf_bytes=pdf_bytes,
-            document_type_override=document_type_override,
+            document_type_hint=document_type_hint,
         )
     except (ExtractionError, ValueError) as exc:
         duration_ms = round((perf_counter() - started_at) * 1000)
@@ -116,7 +120,7 @@ def _extract_and_save(
         failed_document = FinancialDocument(
             id=document_id,
             filename=filename,
-            document_type=document_type_override or DocumentType.OTHER,
+            document_type=DocumentType.OTHER,
         )
         updated = update_document(
             user_id,

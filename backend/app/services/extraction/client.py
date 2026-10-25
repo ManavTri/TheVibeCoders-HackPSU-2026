@@ -17,16 +17,29 @@ def create_gemini_client(api_key: str, timeout_seconds: int) -> Any:
     )
 
 
-def generate_envelope(client: Any, model: str, pdf_bytes: bytes) -> str:
+def generate_envelope(
+    client: Any,
+    model: str,
+    pdf_bytes: bytes,
+    document_type_hint: str | None = None,
+) -> str:
     from google.genai import types
 
     from app.schemas.documents import ExtractionEnvelope
     from app.services.extraction.prompts import EXTRACTION_INSTRUCTIONS
 
+    instructions = EXTRACTION_INSTRUCTIONS
+    if document_type_hint:
+        instructions += (
+            "\nThe user optionally suggested this document category: "
+            f"{document_type_hint}. Treat it only as a hint; classify the PDF "
+            "from its contents and return the category that best matches the document."
+        )
+
     response = client.models.generate_content(
         model=model,
         contents=[
-            EXTRACTION_INSTRUCTIONS,
+            instructions,
             types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"),
         ],
         config=types.GenerateContentConfig(

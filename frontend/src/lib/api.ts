@@ -25,10 +25,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export async function uploadDocument(file: File, documentType: DocumentType): Promise<DocumentRecord> {
+export async function uploadDocument(file: File, documentTypeHint?: DocumentType): Promise<DocumentRecord> {
   const body = new FormData()
   body.append('file', file)
-  body.append('document_type', documentType)
+  if (documentTypeHint) body.append('document_type_hint', documentTypeHint)
   return request<DocumentRecord>('/documents', { method: 'POST', body })
 }
 

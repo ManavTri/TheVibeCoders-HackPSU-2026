@@ -67,7 +67,7 @@ All API paths are prefixed by `/api`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/documents` | Upload a PDF to private Storage, optionally accept a user-selected type, and classify/extract fields |
+| `POST` | `/documents` | Upload a PDF to private Storage, optionally accept a `document_type_hint`, and classify/extract fields; Gemini's classification is authoritative |
 | `GET` | `/documents?state=active\|archived\|deleted` | List documents in the selected state (defaults to active) |
 | `GET` | `/documents/{id}` | Read document fields and extraction status |
 | `PATCH` | `/documents/{id}` | Correct extracted fields |
@@ -88,7 +88,7 @@ All API paths are prefixed by `/api`.
 
 Validation normalizes academic terms and builds a deterministic ledger before applying the rules. Study-abroad quotes and cost estimates are kept separate from billed charges, and totals are never combined across currencies. See [`docs/term-model.md`](docs/term-model.md) and [`docs/validation-rules.md`](docs/validation-rules.md).
 
-The upload UI performs a validation using only the newly uploaded, successfully extracted documents. After a student corrects a field on a report, the app calls `PATCH /documents/{id}`, starts a new validation run, and opens the refreshed report.
+The upload UI accepts an optional document-type hint, then shows the extracted classification and fields for review and correction before validation. Gemini determines the saved type; a user's hint only informs classification and never overrides it. The comparison uses the newly uploaded, successfully extracted documents. After a student corrects a field on a report, the app calls `PATCH /documents/{id}`, starts a new validation run, and opens the refreshed report.
 The chat assistant does not persist conversation history. Common document lists, findings, deadlines, summaries, and help responses use local templates without Gemini; only open-ended questions require backend-only `LLM_API_KEY` and `LLM_MODEL`. Single-tool answers also avoid an extra model round trip. Edits, re-extraction, and validation rechecks require explicit confirmation. Chat requests are limited to 20 per user per 10 minutes, and action confirmations/cancellations to 10 per 10 minutes; the backend also caps pending actions. See [`docs/agent-design.md`](docs/agent-design.md) for details.
 
 ## Project commands

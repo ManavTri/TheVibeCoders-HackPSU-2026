@@ -53,7 +53,7 @@ class ScenarioExtractor:
         document_id: str,
         filename: str,
         pdf_bytes: bytes,
-        document_type_override=None,
+        document_type_hint=None,
     ) -> ExtractionResult:
         del pdf_bytes
         aliases = {
@@ -72,7 +72,7 @@ class ScenarioExtractor:
         document = FinancialDocument(
             id=document_id,
             filename=filename,
-            document_type=document_type_override or envelope.document_type,
+            document_type=envelope.document_type,
             amount=envelope.total_amount,
             currency=envelope.currency or "USD",
             term=envelope.term,

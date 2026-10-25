@@ -42,6 +42,22 @@ def test_document_endpoint_marks_pdf_without_text_failed(client: TestClient) -> 
     assert "no selectable text" in response.json()["extraction_error"]
 
 
+def test_document_endpoint_allows_upload_without_type_hint(client: TestClient) -> None:
+    writer = PdfWriter()
+    writer.add_blank_page(width=300, height=300)
+    output = BytesIO()
+    writer.write(output)
+
+    response = client.post(
+        "/api/documents",
+        files={"file": ("unknown.pdf", output.getvalue(), "application/pdf")},
+    )
+
+    assert response.status_code == 201
+    assert response.json()["document_type"] == "other"
+    assert response.json()["status"] == "failed"
+
+
 def test_scenario_one_pdfs_match_expected_rules(client: TestClient) -> None:
     scenario = SAMPLES / "scenario_1_mismatch"
     documents = [
