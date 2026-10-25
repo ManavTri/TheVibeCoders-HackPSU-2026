@@ -44,6 +44,14 @@ export interface ValidationReport {
   summary: string
 }
 
+export interface CurrentFindingsReport {
+  findings: Finding[]
+  summary: {
+    skipped_rules: number
+    rule_errors: Array<{ rule_id: string; error_class: string }>
+  }
+}
+
 export interface Insights {
   report_id: string
   headline: string
