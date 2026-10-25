@@ -253,6 +253,7 @@ def test_pdf_text_is_only_sent_as_a_pdf_part_not_prompt_instructions() -> None:
     assert call["contents"][1].inline_data.data == pdf
     assert call["config"].temperature == 0
     assert call["config"].response_mime_type == "application/json"
+    assert call["config"].response_json_schema["title"] == "ExtractionEnvelope"
 
 
 def route_gemini(monkeypatch, *responses: str | Exception) -> FakeModels:

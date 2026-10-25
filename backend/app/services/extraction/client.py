@@ -45,7 +45,7 @@ def generate_envelope(
         config=types.GenerateContentConfig(
             temperature=0,
             response_mime_type="application/json",
-            response_schema=ExtractionEnvelope,
+            response_json_schema=ExtractionEnvelope.model_json_schema(),
         ),
     )
     if not response.text:
