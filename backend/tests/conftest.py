@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 from app.core.config import get_settings
 from app.db.repositories import clear_repositories
 from app.main import app
+from app.services.ai.agent import reset_chat_state
 
 
 @pytest.fixture(autouse=True)
@@ -18,7 +19,9 @@ def isolate_backend_settings(monkeypatch):
     }.items():
         monkeypatch.setenv(name, value)
     get_settings.cache_clear()
+    reset_chat_state()
     yield
+    reset_chat_state()
     get_settings.cache_clear()
 
 
@@ -35,8 +38,10 @@ def client(monkeypatch) -> TestClient:
         monkeypatch.setenv(name, value)
     get_settings.cache_clear()
     clear_repositories()
+    reset_chat_state()
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
     clear_repositories()
+    reset_chat_state()
     get_settings.cache_clear()
