@@ -21,13 +21,10 @@ from app.services.extraction.client import create_gemini_client
 router = APIRouter(prefix="/ai", tags=["ai"])
 
 
-def get_ai_client() -> Any:
+def get_ai_client() -> Any | None:
     settings = get_settings()
     if not settings.llm_enabled or not settings.llm_model:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="The financial assistant is temporarily unavailable. Please try again.",
-        )
+        return None
     try:
         return create_gemini_client(
             settings.llm_api_key or "", min(settings.llm_timeout_seconds, 40)

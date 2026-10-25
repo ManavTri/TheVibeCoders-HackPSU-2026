@@ -7,11 +7,17 @@ suggested follow-ups, the document `sources` used, and any `pendingActions`.
 History is supplied by the client for that request and is never persisted by
 the API.
 
-The endpoint requires backend-only `LLM_API_KEY` and `LLM_MODEL` settings. If
-they are missing or Gemini is unavailable, the API returns a friendly 503. The
-manual function-calling loop uses the `google-genai` SDK with automatic function
+The endpoint requires backend-only `LLM_API_KEY` and `LLM_MODEL` settings for
+open-ended questions. Common greetings/help, document lists, findings,
+deadlines, and financial summaries use deterministic templates and repository
+data without invoking Gemini. If Gemini is unavailable, these common requests
+still work; open-ended questions return a friendly 503. The manual
+function-calling loop uses the `google-genai` SDK with automatic function
 calling disabled. It makes at most six model calls, has a 40-second wall-clock
-budget, and caps generated output at 1,024 tokens. A per-user in-memory token
+budget, caps generated output at 512 tokens per call, and supplies at most the
+six latest history turns. For supported single-tool reads and write proposals,
+the API formats the result locally instead of making a second model call. A
+per-user in-memory token
 bucket allows at most 20 chat requests per 10 minutes, with one concurrent
 chat per user. Confirm/cancel endpoints have a separate limit of 10 calls
 per 10 minutes. Large document, finding, and deadline results are capped

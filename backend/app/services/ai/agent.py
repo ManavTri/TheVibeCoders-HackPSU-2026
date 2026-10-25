@@ -29,7 +29,8 @@ from app.services.validation.evaluate import evaluate_findings
 logger = logging.getLogger(__name__)
 MAX_ITERATIONS = 6
 MAX_CHAT_SECONDS = 40
-MAX_OUTPUT_TOKENS = 1024
+MAX_OUTPUT_TOKENS = 512
+MAX_HISTORY_TURNS = 6
 RATE_LIMIT_CAPACITY = 20
 RATE_LIMIT_REFILL_PER_SECOND = 1 / 30
 ACTION_RATE_LIMIT_CAPACITY = 10
@@ -52,6 +53,34 @@ Never claim a write has happened unless its confirmed result is provided.
 """
 DATA_OPEN = "<<<BEGIN UNTRUSTED DOCUMENT DATA>>>"
 DATA_CLOSE = "<<<END UNTRUSTED DOCUMENT DATA>>>"
+_DETERMINISTIC_INTENTS = (
+    (
+        "findings",
+        re.compile(r"\b(findings?|inconsistencies|discrepancies)\b", re.IGNORECASE),
+        "get_findings",
+    ),
+    (
+        "deadlines",
+        re.compile(r"\b(deadlines?|due dates?|upcoming dates?)\b", re.IGNORECASE),
+        "get_deadlines",
+    ),
+    (
+        "documents",
+        re.compile(
+            r"\b(list|show|what|which|view)\b.{0,40}\b(documents?|files|uploads?)\b",
+            re.IGNORECASE,
+        ),
+        "list_documents",
+    ),
+    (
+        "financial_summary",
+        re.compile(
+            r"\b(financial summary|budget summary|funding summary|how much (?:aid|funding|do i have))\b",
+            re.IGNORECASE,
+        ),
+        "financial_summary",
+    ),
+)
 
 _TOOL_DECLARATIONS: list[dict[str, Any]] = [
     {
@@ -502,6 +531,7 @@ def _execute_read_tool(
         for record in visible_records:
             sources[record["id"]] = _source_from_record(record)
         return {
+            "state": state,
             "documents": [
                 {
                     "id": record["id"],
@@ -680,6 +710,165 @@ def _execute_read_tool(
     raise ValueError("Tool is not available.")
 
 
+def _format_tool_reply(name: str, result: dict[str, Any]) -> str | None:
+    if "error" in result:
+        return None
+    if name == "list_documents":
+        documents = result.get("documents", [])
+        if not documents:
+            if result.get("state") == "active":
+                return "You haven't uploaded any active documents yet."
+            return f"You don't have any {result.get('state', 'matching')} documents yet."
+        rows = [
+            f"- {document['filename']}: {document['document_type'].replace('_', ' ')}, "
+            f"{document['status']}, {document['state']}"
+            for document in documents[:10]
+        ]
+        suffix = (
+            f"\nShowing 10 of {result['total_count']} documents."
+            if result.get("total_count", 0) > 10
+            else ""
+        )
+        return "Here are your documents:\n" + "\n".join(rows) + suffix
+    if name == "get_findings":
+        findings = result.get("findings", [])
+        if not findings:
+            return "There are no current inconsistencies in your active extracted documents."
+        rows = [
+            f"- {finding['title']} ({finding['severity']}): {finding['explanation']}"
+            for finding in findings[:8]
+        ]
+        suffix = (
+            f"\nShowing 8 of {result['total_count']} findings."
+            if result.get("total_count", 0) > 8
+            else ""
+        )
+        return "Current findings:\n" + "\n".join(rows) + suffix
+    if name == "get_deadlines":
+        deadlines = result.get("deadlines", [])
+        if not deadlines:
+            return "No deadlines were found in your active extracted documents."
+        rows = [
+            f"- {item['date']}: {item['label']} — {item['filename']}"
+            for item in deadlines[:10]
+        ]
+        suffix = (
+            f"\nShowing 10 of {result['total_count']} deadlines."
+            if result.get("total_count", 0) > 10
+            else ""
+        )
+        return "Dates found in your documents:\n" + "\n".join(rows) + suffix
+    if name == "get_document":
+        document = result.get("document")
+        if not document:
+            return "I couldn't find that document in your account."
+        details = [
+            ("Type", str(document.get("document_type") or "").replace("_", " ")),
+            ("Amount", document.get("amount")),
+            ("Currency", document.get("currency")),
+            ("Term", document.get("term")),
+            ("Deadline", document.get("deadline")),
+            ("Required credits", document.get("required_credits")),
+            ("State", document.get("state")),
+            ("Extraction status", document.get("status")),
+        ]
+        lines = [f"- {label}: {value}" for label, value in details if value is not None]
+        envelope = document.get("extraction_envelope") or {}
+        summary = envelope.get("summary")
+        if summary:
+            lines.append(f"- Extracted summary: {summary}")
+        return f"Details from {document['filename']}:\n" + "\n".join(lines)
+    if name == "compare_documents":
+        documents = result.get("documents", [])
+        findings = result.get("findings", [])
+        rows = [
+            f"- {document['filename']}: {document['document_type'].replace('_', ' ')}, "
+            f"amount {document['amount'] if document['amount'] is not None else 'not found'} "
+            f"{document['currency']}, term {document['term'] or 'not found'}"
+            for document in documents
+        ]
+        if not rows:
+            return "I couldn't compare those documents. Select at least two extracted documents."
+        if findings:
+            rows.extend(
+                f"- Finding: {finding['title']} ({finding['severity']}): "
+                f"{finding['explanation']}"
+                for finding in findings[:8]
+            )
+        else:
+            rows.append("No potential inconsistencies were detected in the available fields.")
+        return "Document comparison:\n" + "\n".join(rows)
+    if name == "financial_summary":
+        totals = result.get("by_currency", {})
+        if not totals:
+            return "I couldn't calculate a summary because no active extracted documents have usable amounts."
+        rows = [
+            f"- {currency}: funding {values['funding']}, costs {values['costs']}, "
+            f"loans {values['loans']}, remaining after funding "
+            f"{values['remaining_balance_after_funding']}"
+            for currency, values in totals.items()
+        ]
+        return "Summary of explicit amounts in your active extracted documents:\n" + "\n".join(rows)
+    if name == "cost_compare":
+        totals = result.get("totals_by_currency", {})
+        if not totals:
+            return "I couldn't compare costs because the selected documents have no eligible amounts."
+        rows = [f"- {currency}: {amount}" for currency, amount in totals.items()]
+        return "Total costs by currency, based on extracted amounts:\n" + "\n".join(rows)
+    if name == "explain_finding":
+        finding = result.get("finding")
+        if not finding:
+            return "I couldn't find that current finding."
+        return (
+            f"{finding['title']}: {finding['explanation']} "
+            f"Suggested next step: {finding['suggested_action']}"
+        )
+    if name in {"compare_documents", "get_document", "cost_compare"}:
+        return None
+    return None
+
+
+def _deterministic_intent(message: str) -> str | None:
+    if re.search(
+        r"\b(archive|restore|delete|remove|correct|edit|change|update|re-extract|reextract|recheck|run checks)\b",
+        message,
+        re.IGNORECASE,
+    ):
+        return None
+    if re.fullmatch(r"\s*(hi|hello|hey|help|what can you do)[!?.\s]*", message, re.IGNORECASE):
+        return "help"
+    matches = [
+        tool_name
+        for _, pattern, tool_name in _DETERMINISTIC_INTENTS
+        if pattern.search(message)
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _deterministic_response(
+    user_id: str, intent: str
+) -> ChatResponse:
+    if intent == "help":
+        return ChatResponse(
+            reply=(
+                "I can list your documents, summarize active findings and deadlines, "
+                "and total explicitly extracted funding and costs. Ask a question to begin. "
+                "Edits and rechecks always require your confirmation."
+            ),
+            suggestions=["Show my documents", "Check current findings", "Show upcoming deadlines"],
+        )
+    sources: dict[str, ChatSource] = {}
+    result = _execute_read_tool(user_id, intent, {}, sources)
+    reply = _format_tool_reply(intent, result)
+    if reply is None:
+        raise ValueError("The deterministic response is unavailable for this request.")
+    return ChatResponse(
+        reply=reply,
+        suggestions=["Check current findings", "Show upcoming deadlines"],
+        sources=list(sources.values())[:MAX_DOCUMENT_RESULTS],
+    )
+
+
 def _run_tool(
     user_id: str,
     name: str,
@@ -757,6 +946,18 @@ async def chat(
     reply = ""
     try:
         settings = get_settings()
+        if not request.history and not request.context_documents:
+            intent = _deterministic_intent(request.message)
+            if intent:
+                result = await asyncio.to_thread(
+                    _deterministic_response, user_id, intent
+                )
+                logger.info(
+                    "AI chat answered without model user_id=%s duration_ms=%d",
+                    user_id,
+                    round((time.monotonic() - started) * 1000),
+                )
+                return result
         if client is None and (not settings.llm_enabled or not settings.llm_model):
             raise ChatUnavailableError()
         if client is None:
@@ -770,7 +971,7 @@ async def chat(
                 role=turn.role,
                 parts=[types.Part.from_text(text=turn.content)],
             )
-            for turn in request.history
+            for turn in request.history[-MAX_HISTORY_TURNS:]
         ]
         if request.context_documents:
             context_records = [
@@ -832,6 +1033,7 @@ async def chat(
                 reply = getattr(response, "text", None) or ""
                 break
             tool_parts = []
+            tool_results = []
             for call in calls:
                 function_name = call.name
                 arguments = dict(call.args or {})
@@ -861,6 +1063,19 @@ async def chat(
                     user_id,
                 )
                 tool_parts.append(_tool_result_part(function_name, result))
+                tool_results.append((function_name, result))
+            if len(tool_results) == 1:
+                function_name, result = tool_results[0]
+                if function_name in _WRITE_TOOLS and pending:
+                    reply = (
+                        f"I prepared this action: {pending[0].summary}. "
+                        "Review the details below and confirm or cancel."
+                    )
+                    break
+                direct_reply = _format_tool_reply(function_name, result)
+                if direct_reply is not None:
+                    reply = direct_reply
+                    break
             if tool_parts:
                 history.append(types.Content(role="user", parts=tool_parts))
             if iterations == MAX_ITERATIONS:

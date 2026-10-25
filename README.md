@@ -79,7 +79,7 @@ All API paths are prefixed by `/api`.
 | `POST` | `/ai/actions/{id}/cancel` | Cancel a pending AI-proposed write action |
 
 The upload UI performs a validation using only the newly uploaded, successfully extracted documents. After a student corrects a field on a report, the app calls `PATCH /documents/{id}`, starts a new validation run, and opens the refreshed report.
-The chat assistant requires backend-only `LLM_API_KEY` and `LLM_MODEL` settings and does not persist conversation history. It proposes edits, re-extraction, and validation rechecks, but every action requires explicit user confirmation. Chat requests are limited to 20 per user per 10 minutes, and action confirmations/cancellations to 10 per 10 minutes; the backend also caps pending actions. See [`docs/agent-design.md`](docs/agent-design.md) for the tool allowlist and threat model.
+The chat assistant does not persist conversation history. Common document lists, findings, deadlines, summaries, and help responses use local templates without Gemini; only open-ended questions require backend-only `LLM_API_KEY` and `LLM_MODEL`. Single-tool answers also avoid an extra model round trip. Edits, re-extraction, and validation rechecks require explicit confirmation. Chat requests are limited to 20 per user per 10 minutes, and action confirmations/cancellations to 10 per 10 minutes; the backend also caps pending actions. See [`docs/agent-design.md`](docs/agent-design.md) for details.
 
 ## Project commands
 
