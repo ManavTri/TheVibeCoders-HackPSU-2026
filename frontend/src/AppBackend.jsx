@@ -575,8 +575,8 @@ function App() {
       return <div><p className="text-sm uppercase tracking-[0.25em] text-[#5f6b76]">Ask about your finances</p><h2 className="mt-2 text-3xl font-semibold text-[#1b2430]">AI financial assistant</h2><p className="mt-2 text-sm text-slate-500">Get document-grounded answers, prepare corrections, or request a fresh validation.</p></div>
     }
     return <SectionCard title="Account settings" subtitle="Authentication and account status">
-      <div className="rounded-xl border border-slate-800 bg-[#0f141a] p-4"><p className="text-xs uppercase tracking-wider text-slate-400">Signed in as</p><p className="mt-2 text-white">{session?.user?.email || 'Local development identity'}</p></div>
-      <p className="mt-4 text-sm leading-6 text-slate-400">The backend does not yet provide profile read or update endpoints. Name and university preferences are tracked in the API gap list.</p>
+      <div className="rounded-xl border border-slate-800 bg-[#0f141a] p-4"><p className="text-xs uppercase tracking-wider text-slate-400">Signed in as</p><p className="mt-2 text-white">{session?.user?.email || 'Signed-in account'}</p></div>
+      <p className="mt-4 text-sm leading-6 text-slate-400">Account access is managed securely by the configured authentication provider.</p>
       {session && <button type="button" onClick={() => void signOut()} className="mt-5 rounded-xl border border-slate-700 px-4 py-2 text-sm text-white">Sign out</button>}
     </SectionCard>
   }
@@ -597,9 +597,8 @@ function App() {
       <main className="min-w-0 flex-1 p-4 sm:p-7 xl:p-9">
         <div className="mx-auto max-w-[1500px]">
           <header className="mb-7 flex flex-wrap items-center justify-between gap-4">
-            <div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Muni · Campus clarity</p><p className="mt-1 text-sm text-slate-600">{session?.user?.email || 'Local demo'}</p></div>
+            <div><p className="text-xs uppercase tracking-[0.2em] text-slate-500">Muni · Campus clarity</p><p className="mt-1 text-sm text-slate-600">{session?.user?.email || 'Your financial workspace'}</p></div>
             <div className="flex items-center gap-3">
-              {!supabase && <span className="rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-600">Local demo mode</span>}
               {session && <button type="button" onClick={() => void signOut()} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700">Sign out</button>}
             </div>
           </header>
@@ -616,7 +615,7 @@ function App() {
               {pageContent}
               <div hidden={activePage !== 'AI Chat'} className="mt-5">
                 <FinancialChat
-                  key={session?.user?.id || 'local-demo'}
+                  key={session?.user?.id || 'muni-session'}
                   onDocumentsChanged={reloadData}
                   onRecheck={refreshFromChatRecheck}
                 />

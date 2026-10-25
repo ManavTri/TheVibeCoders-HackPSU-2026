@@ -41,7 +41,7 @@ export function Dashboard() {
           <div className="how-item"><span>01</span><div><b>Add your documents</b><p>PDFs from your school, scholarship provider, or program.</p></div></div>
           <div className="how-item"><span>02</span><div><b>We look for mismatches</b><p>Amounts, terms, dates, and credit requirements.</p></div></div>
           <div className="how-item"><span>03</span><div><b>Get questions to ask</b><p>Know what to follow up on with your financial-aid office.</p></div></div>
-          <div className="demo-callout"><span>✦</span><p>New here? Try the synthetic sample PDFs from our demo scenario.</p></div>
+          <div className="demo-callout"><span>✦</span><p>New here? Try the synthetic sample PDFs to see how Muni works.</p></div>
         </aside>
       </section>
       {error && <p className="form-error" role="alert">{error}</p>}
