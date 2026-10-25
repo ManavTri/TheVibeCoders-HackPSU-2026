@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import ai, documents, findings, insights, validations
+from app.api.routes import ai, documents, findings, insights, ledger, validations
 from app.core.auth import current_user
 from app.core.config import get_settings
 
@@ -49,6 +49,7 @@ app.add_middleware(
 auth_dependency = [Depends(current_user)]
 app.include_router(documents.router, prefix=settings.api_prefix, dependencies=auth_dependency)
 app.include_router(findings.router, prefix=settings.api_prefix, dependencies=auth_dependency)
+app.include_router(ledger.router, prefix=settings.api_prefix, dependencies=auth_dependency)
 app.include_router(validations.router, prefix=settings.api_prefix, dependencies=auth_dependency)
 app.include_router(insights.router, prefix=settings.api_prefix, dependencies=auth_dependency)
 app.include_router(ai.router, prefix=settings.api_prefix, dependencies=auth_dependency)

@@ -65,7 +65,7 @@ _KEYWORDS: tuple[tuple[tuple[str, ...], str, Literal["charge", "credit", "unknow
 
 
 @total_ordering
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class Term:
     season: str | None
     year: int | None
@@ -89,6 +89,14 @@ class Term:
         if not isinstance(other, Term):
             return NotImplemented
         return self.sort_key < other.sort_key
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, Term):
+            return NotImplemented
+        return (self.season, self.year) == (other.season, other.year)
+
+    def __hash__(self) -> int:
+        return hash((self.season, self.year))
 
     def __str__(self) -> str:
         if not self.is_known:
@@ -187,7 +195,11 @@ def parse_terms(value: str | None) -> ParsedTerms:
             if year_range and canonical_season == "spring":
                 season_year = year_range[1]
             terms.append(Term(canonical_season, season_year))
-        return ParsedTerms(tuple(sorted(set(terms))), academic_year=year_range)
+        return ParsedTerms(
+            tuple(sorted(set(terms))),
+            summer_included="summer" in season_matches,
+            academic_year=year_range,
+        )
 
     if year_range:
         start, end = year_range

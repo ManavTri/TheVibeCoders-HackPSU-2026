@@ -7,6 +7,7 @@ from typing import Any, Literal
 
 from app.schemas.documents import DocumentType, FinancialDocument, LineItem
 from app.services.validation.normalize import (
+    AcademicCalendar,
     assign_item_term,
     classify_line_item,
     parse_terms,
@@ -234,7 +235,11 @@ def _get_buckets(
     return mapping[term][currency]
 
 
-def build_ledger(documents: list[FinancialDocument], today: date) -> Ledger:
+def build_ledger(
+    documents: list[FinancialDocument],
+    today: date,
+    calendar: AcademicCalendar | None = None,
+) -> Ledger:
     """Build balances from active extracted documents without persistence or I/O."""
     _ = today
     terms: dict[str, dict[str, LedgerTotals]] = {}
@@ -245,16 +250,24 @@ def build_ledger(documents: list[FinancialDocument], today: date) -> Ledger:
     for document in documents:
         envelope = document.extraction_envelope or {}
         currency = str(envelope.get("currency") or document.currency or "USD")
-        items = [
-            LineItem.model_validate(item)
-            for item in envelope.get("line_items", [])
-            if isinstance(item, dict) and item.get("amount") is not None
-        ]
+        raw_items = envelope.get("line_items", [])
+        if not isinstance(raw_items, list):
+            raw_items = []
+        items = []
+        for raw_item in raw_items:
+            if not isinstance(raw_item, dict) or raw_item.get("amount") is None:
+                continue
+            try:
+                items.append(LineItem.model_validate(raw_item))
+            except ValueError:
+                continue
         document_terms = envelope.get("terms")
         if not isinstance(document_terms, list):
             document_terms = []
         document_terms = [term for term in document_terms if isinstance(term, str)]
         disbursements = envelope.get("disbursements", [])
+        if not isinstance(disbursements, list):
+            disbursements = []
         document_entries: list[LedgerEntry] = []
 
         for item in items:
@@ -265,6 +278,7 @@ def build_ledger(documents: list[FinancialDocument], today: date) -> Ledger:
                 document_term=document.term,
                 document_terms=document_terms,
                 item_date=item.date,
+                calendar=calendar,
             )
             term_name = (
                 str(assignment.term)
@@ -297,6 +311,7 @@ def build_ledger(documents: list[FinancialDocument], today: date) -> Ledger:
                     document_term=document.term,
                     document_terms=document_terms,
                     item_date=document.deadline,
+                    calendar=calendar,
                 )
                 legacy = LedgerEntry(
                     **{
@@ -316,16 +331,20 @@ def build_ledger(documents: list[FinancialDocument], today: date) -> Ledger:
         for raw_disbursement in disbursements:
             if not isinstance(raw_disbursement, dict) or raw_disbursement.get("amount") is None:
                 continue
-            disbursement = _entry(
-                document,
-                label=str(raw_disbursement.get("award_label") or "Expected disbursement"),
-                amount=Decimal(str(raw_disbursement["amount"])),
-                currency=currency,
-                kind="disbursement",
-                direction="credit",
-                term=None,
-                source="disbursement",
-            )
+            try:
+                disbursement_amount = Decimal(str(raw_disbursement["amount"]))
+                disbursement = _entry(
+                    document,
+                    label=str(raw_disbursement.get("award_label") or "Expected disbursement"),
+                    amount=disbursement_amount,
+                    currency=currency,
+                    kind="disbursement",
+                    direction="credit",
+                    term=None,
+                    source="disbursement",
+                )
+            except (ValueError, ArithmeticError):
+                continue
             raw_term = raw_disbursement.get("term")
             raw_date = raw_disbursement.get("date")
             try:
@@ -337,6 +356,7 @@ def build_ledger(documents: list[FinancialDocument], today: date) -> Ledger:
                 document_term=document.term,
                 document_terms=document_terms,
                 item_date=parsed_date,
+                calendar=calendar,
             )
             disbursement = LedgerEntry(
                 **{
@@ -352,7 +372,9 @@ def build_ledger(documents: list[FinancialDocument], today: date) -> Ledger:
             total.setdefault(currency, LedgerTotals(None, currency)).expected_disbursements.append(
                 disbursement
             )
-            if not items and not document_entries:
+            if not items and not any(
+                entry.source == "legacy_document_amount" for entry in document_entries
+            ):
                 document_entries.append(disbursement)
             elif assignment.term and assignment.term.is_known:
                 term_totals = _get_buckets(terms, str(assignment.term), currency)

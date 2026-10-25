@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_model: str | None = None
     llm_timeout_seconds: int = 45
+    rule_assist_enabled: bool = False
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 

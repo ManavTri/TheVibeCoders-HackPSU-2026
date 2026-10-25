@@ -121,6 +121,7 @@ class FinancialDocument(BaseModel):
     required_credits: int | None = Field(default=None, ge=0)
     extracted_text: str = Field(default="", exclude=True)
     extraction_envelope: dict[str, Any] | None = None
+    type_confidence: float | None = None
 
 
 class DocumentRecord(FinancialDocument):
@@ -131,7 +132,6 @@ class DocumentRecord(FinancialDocument):
     extraction_error: str | None = None
     category: str = "Uploaded"
     extraction_source: Literal["gemini", "fallback"] | None = None
-    type_confidence: float | None = None
     type_detected: DocumentType | None = None
     needs_review: bool = False
     user_edited_fields: list[str] = Field(default_factory=list)

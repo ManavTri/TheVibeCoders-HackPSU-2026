@@ -1,3 +1,4 @@
+from datetime import date
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -24,7 +25,7 @@ def create_validation(
     request = request or ValidationRequest()
     user_id = current_user_id(user)
     if request.document_ids is None:
-        records = list_documents(user_id, state="all")
+        records = list_documents(user_id, state="active")
     else:
         document_ids = [str(document_id) for document_id in request.document_ids]
         if len(set(document_ids)) != len(document_ids):
@@ -34,6 +35,11 @@ def create_validation(
             record = get_document(user_id, document_id)
             if record is None:
                 raise HTTPException(status_code=404, detail="One or more documents were not found.")
+            if record["state"] != "active":
+                raise HTTPException(
+                    status_code=400,
+                    detail="Only active documents can be validated.",
+                )
             records.append(record)
     records = [record for record in records if record["status"] == DocumentStatus.EXTRACTED.value]
     if len(records) < 2:
@@ -42,7 +48,7 @@ def create_validation(
             detail="At least two successfully extracted documents are required to validate.",
         )
     documents = [FinancialDocument.model_validate(record) for record in records]
-    findings = evaluate_findings(documents)
+    findings = evaluate_findings(documents, today=date.today())
     return create_validation_run(user_id, documents, findings)
 
 

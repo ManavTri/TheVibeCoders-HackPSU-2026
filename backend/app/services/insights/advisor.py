@@ -1,20 +1,50 @@
+from decimal import Decimal
+
 from app.schemas.insights import InsightsResponse
 from app.schemas.validation import ValidationReport
 
 
-def summarize_report(report: ValidationReport) -> InsightsResponse:
-    error_count = sum(finding.severity.value == "error" for finding in report.findings)
-    warning_count = sum(finding.severity.value == "warning" for finding in report.findings)
+def summarize_report(
+    report: ValidationReport, ledger: dict | None = None
+) -> InsightsResponse:
+    errors = [finding for finding in report.findings if finding.severity.value == "error"]
+    warnings = [
+        finding for finding in report.findings if finding.severity.value == "warning"
+    ]
     recommendations: list[str] = []
+    if errors:
+        recommendations.append(
+            "Start with the error-severity findings, especially overdue deadlines or confirmed amount differences."
+        )
+    if warnings:
+        recommendations.append(
+            "Confirm the flagged balances, award postings, or schedule differences with the named office before paying."
+        )
     if report.findings:
-        recommendations.append("Confirm flagged details with the issuer or your financial-aid office before making a payment decision.")
-    if error_count:
-        recommendations.append("Resolve the academic-term discrepancy first; award eligibility may depend on the term.")
-    if warning_count:
-        recommendations.append("Review award amounts and enrollment requirements with the relevant office.")
+        categories = sorted(
+            {finding.category for finding in report.findings if finding.category}
+        )
+        if categories:
+            recommendations.append(
+                "Review the findings by category: " + ", ".join(categories) + "."
+            )
     deadlines = [doc.deadline for doc in report.documents if doc.deadline is not None]
     if deadlines:
         recommendations.append(f"Add the earliest listed date ({min(deadlines).isoformat()}) to your calendar and verify what action is due.")
+    if ledger:
+        term_balances = [
+            (term, currency, values.get("gap"))
+            for term, currencies in ledger.get("terms", {}).items()
+            for currency, values in currencies.items()
+            if Decimal(str(values.get("gap", "0"))) > 0
+        ]
+        if term_balances:
+            term, currency, gap = max(
+                term_balances, key=lambda item: Decimal(str(item[2]))
+            )
+            recommendations.append(
+                f"The current ledger shows the largest listed gap in {term}: {currency} {Decimal(str(gap)):,.2f}."
+            )
     if not recommendations:
         recommendations.append("No cross-document conflicts were detected in the fields the app could read. Verify any missing details with the issuer.")
     if report.findings:

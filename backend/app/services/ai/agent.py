@@ -4,8 +4,8 @@ import logging
 import re
 import time
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 from threading import Lock
 from typing import Any
 from uuid import uuid4
@@ -354,62 +354,71 @@ def _record_to_document(record: dict[str, Any]) -> FinancialDocument:
 
 
 def _financial_summary(user_id: str) -> dict[str, Any]:
-    funding_types = {DocumentType.AWARD_LETTER.value, DocumentType.FINANCIAL_AID_PACKAGE.value}
-    cost_types = {
-        DocumentType.TUITION_BILL.value,
-        DocumentType.STUDY_ABROAD_QUOTE.value,
-        DocumentType.HOUSING_CONTRACT.value,
-        DocumentType.PAYMENT_PLAN.value,
+    ledger = repositories.get_current_ledger(user_id, today=date.today())
+    records = {
+        record["id"]: record for record in _active_extracted_records(user_id)
     }
     totals: dict[str, dict[str, Decimal]] = {}
-    sources: list[dict[str, Any]] = []
-    for record in _active_extracted_records(user_id):
-        amount = record.get("amount")
-        if amount is None:
-            continue
-        try:
-            numeric_amount = Decimal(str(amount))
-        except (InvalidOperation, TypeError, ValueError):
-            continue
-        if not numeric_amount.is_finite():
-            continue
-        currency = str(record.get("currency") or "USD")
-        group = totals.setdefault(
-            currency,
-            {"funding": Decimal(0), "costs": Decimal(0), "loans": Decimal(0)},
+    sources_by_id: dict[str, dict[str, Any]] = {}
+    for currency, amount_totals in ledger["total"].items():
+        aid_by_kind = amount_totals["aid_by_kind"]
+        funding = sum(
+            (
+                Decimal(str(amount))
+                for kind, amount in aid_by_kind.items()
+                if kind != "loan"
+            ),
+            Decimal(0),
         )
-        doc_type = record["document_type"]
-        if doc_type in funding_types:
-            group["funding"] += numeric_amount
-        elif doc_type == DocumentType.LOAN_OFFER.value:
-            group["loans"] += numeric_amount
-        elif doc_type in cost_types:
-            group["costs"] += numeric_amount
-        else:
-            continue
-        sources.append(
-            {
-                "id": record["id"],
-                "filename": record["filename"],
-                "document_type": doc_type,
-                "amount": str(numeric_amount),
-                "currency": currency,
-            }
+        loans = Decimal(str(aid_by_kind.get("loan", "0")))
+        costs = sum(
+            (Decimal(str(amount)) for amount in amount_totals["charges_by_kind"].values()),
+            Decimal(0),
         )
+        payments = Decimal(str(amount_totals["payments"]))
+        totals[currency] = {
+            "funding": funding,
+            "costs": costs,
+            "loans": loans,
+            "payments": payments,
+        }
+        for entry in amount_totals["provenance"]:
+            document_id = entry["document_id"]
+            record = records.get(document_id)
+            if record is None:
+                continue
+            source = sources_by_id.setdefault(
+                document_id,
+                {
+                    "id": document_id,
+                    "filename": record["filename"],
+                    "document_type": record["document_type"],
+                    "currency": currency,
+                    "amount": entry["amount"],
+                    "line_items": [],
+                },
+            )
+            source["line_items"].append(
+                {"label": entry["label"], "amount": entry["amount"], "kind": entry["kind"]}
+            )
     return {
         "by_currency": {
             currency: {
                 "funding": _decimal_text(values["funding"]),
                 "costs": _decimal_text(values["costs"]),
                 "loans": _decimal_text(values["loans"]),
+                "payments": _decimal_text(values["payments"]),
                 "remaining_balance_after_funding": _decimal_text(
-                    max(Decimal(0), values["costs"] - values["funding"])
+                    max(Decimal(0), values["costs"] - values["funding"] - values["payments"])
                 ),
             }
             for currency, values in sorted(totals.items())
         },
-        "basis": "Only active extracted documents with explicit amounts are included.",
-        "documents": sources,
+        "basis": "Totals use the same term-aware ledger as GET /ledger; currencies are not converted.",
+        "documents": list(sources_by_id.values()),
+        "terms": ledger["terms"],
+        "annual_unallocated": ledger["annual_unallocated"],
+        "estimates": ledger["estimates"],
     }
 
 
@@ -595,9 +604,11 @@ def _execute_read_tool(
         if not isinstance(ids, list) or not 2 <= len(ids) <= 10 or len(set(ids)) != len(ids):
             raise ValueError("Select between 2 and 10 unique document IDs.")
         records = [_owned_document(user_id, document_id) for document_id in ids]
+        if any(record["state"] != "active" for record in records):
+            raise ValueError("Only active documents can be compared.")
         records = [r for r in records if r["status"] == DocumentStatus.EXTRACTED.value]
         documents = [_record_to_document(record) for record in records]
-        findings = evaluate_findings(documents)
+        findings = evaluate_findings(documents, today=date.today())
         for record in records:
             sources[record["id"]] = _source_from_record(record)
         return {
@@ -1128,7 +1139,7 @@ def _execute_pending(user_id: str, action: PendingActionRecord) -> dict[str, Any
         report = repositories.create_validation_run(
             user_id,
             documents,
-            evaluate_findings(documents),
+            evaluate_findings(documents, today=date.today()),
         )
         return {"report_id": report.id}
 

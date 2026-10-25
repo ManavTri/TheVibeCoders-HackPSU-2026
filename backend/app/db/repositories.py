@@ -1,6 +1,6 @@
 """The only module allowed to access Supabase Postgres or Storage."""
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from threading import RLock
 from typing import Any
@@ -89,6 +89,22 @@ def _record(row: dict[str, Any]) -> dict[str, Any]:
         "state": _document_state(row),
         "extracted_text": "",
     }
+
+
+def _finding_from_row(row: dict[str, Any]) -> Finding:
+    details = row.get("details")
+    return Finding.model_validate(
+        {
+            "rule_id": row["rule_id"],
+            "severity": row["severity"],
+            "title": row["title"],
+            "explanation": row["explanation"],
+            "document_ids": row["document_ids"],
+            "fields": row.get("fields") or {},
+            "suggested_action": row["suggested_action"],
+            **(details if isinstance(details, dict) else {}),
+        }
+    )
 
 
 def find_document_by_hash(user_id: str, content_sha256: str) -> dict[str, Any] | None:
@@ -327,18 +343,38 @@ def soft_delete_document(user_id: str, document_id: str) -> dict[str, Any] | Non
     return _record(row) if row else None
 
 
-def get_current_findings(user_id: str) -> list[Finding]:
-    from app.services.validation.evaluate import evaluate_findings
-
+def _active_validation_documents(user_id: str) -> list[FinancialDocument]:
     records = [
         record
         for record in list_documents(user_id, state="active")
         if record["status"] == DocumentStatus.EXTRACTED.value
     ]
-    if len(records) < 2:
+    return [FinancialDocument.model_validate(record) for record in records]
+
+
+def get_current_findings(
+    user_id: str,
+    *,
+    include_all: bool = False,
+    today: date | None = None,
+) -> list[Finding]:
+    from app.services.validation.evaluate import evaluate_findings
+
+    documents = _active_validation_documents(user_id)
+    if len(documents) < 2:
         return []
-    documents = [FinancialDocument.model_validate(record) for record in records]
-    return evaluate_findings(documents)
+    return evaluate_findings(
+        documents,
+        today=today or date.today(),
+        include_all=include_all,
+    )
+
+
+def get_current_ledger(user_id: str, *, today: date | None = None) -> dict[str, Any]:
+    from app.services.validation.ledger import build_ledger
+
+    ledger = build_ledger(_active_validation_documents(user_id), today=today or date.today())
+    return ledger.as_dict()
 
 
 def update_document(
@@ -555,6 +591,18 @@ def create_validation_run(
                             for key, value in finding.fields.items()
                         },
                         "suggested_action": finding.suggested_action,
+                        "details": finding.model_dump(
+                            mode="json",
+                            exclude={
+                                "rule_id",
+                                "severity",
+                                "title",
+                                "explanation",
+                                "document_ids",
+                                "fields",
+                                "suggested_action",
+                            },
+                        ),
                     }
                     for finding in findings
                 ]
@@ -618,18 +666,7 @@ def get_validation_run(user_id: str, run_id: str) -> ValidationReport | None:
             for document_id in run["document_ids"]
             if (row := documents_by_id.get(document_id)) is not None
         ],
-        findings=[
-            {
-                "rule_id": row["rule_id"],
-                "severity": row["severity"],
-                "title": row["title"],
-                "explanation": row["explanation"],
-                "document_ids": row["document_ids"],
-                "fields": row["fields"],
-                "suggested_action": row["suggested_action"],
-            }
-            for row in finding_rows
-        ],
+        findings=[_finding_from_row(row) for row in finding_rows],
         summary=(
             f"{len(finding_rows)} potential {'inconsistency' if len(finding_rows) == 1 else 'inconsistencies'} found."
             if finding_rows
