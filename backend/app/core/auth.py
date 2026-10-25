@@ -2,6 +2,7 @@
 import logging
 from functools import lru_cache
 from typing import Annotated, Any
+from uuid import UUID
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -118,10 +119,17 @@ def current_user(
         else:
             claims = _decode_supabase(token, settings)
 
-        if not isinstance(claims.get("sub"), str) or not claims["sub"].strip():
+        subject = claims.get("sub")
+        if not isinstance(subject, str) or not subject.strip():
             raise jwt.InvalidTokenError(
                 "Token is missing a valid user subject"
             )
+        try:
+            UUID(subject)
+        except ValueError as exc:
+            raise jwt.InvalidTokenError(
+                "Token is missing a valid user subject"
+            ) from exc
 
         return claims
 
