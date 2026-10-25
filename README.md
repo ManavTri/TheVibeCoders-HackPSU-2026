@@ -45,11 +45,18 @@ cd backend
 python -m pip install -e ".[test]"
 python -m uvicorn app.main:app --reload
 
-# Terminal 2 — frontend
+# Terminal 2 — frontend (install dependencies once; do not reinstall while Vite is running)
 cd frontend
 npm ci
 npm run dev
 ```
+
+Alternatively, from the repository root run `make frontend-install` once, then
+`make frontend` to start the dev server. `make frontend` deliberately does not
+run `npm ci` on every launch: `npm ci` removes and recreates `node_modules`,
+which can fail on Windows/WSL when a running Node/Vite process holds its native
+Rolldown binary open. Stop the existing frontend server before running
+`make frontend-install` again after dependency changes.
 
 Open `http://localhost:5173`; backend health is at `http://localhost:8000/health`, and API docs are at `http://localhost:8000/docs`.
 
