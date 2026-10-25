@@ -36,7 +36,7 @@ that ID. Tool results are treated as untrusted document data.
 | `get_findings()` | Read | Returns current findings for active, extracted documents |
 | `compare_documents(ids)` | Read | Runs existing validation rules against selected owned documents |
 | `get_deadlines()` | Read | Lists explicit deadlines from active extracted documents |
-| `financial_summary()` | Read | Sums explicit amounts in Python by currency, separating aid, costs, loans, and remaining balance |
+| `financial_summary()` | Read | Sums billed aid, costs, loans, and remaining balance by currency; reports awarded-but-unbilled aid separately so it does not reduce the billed balance |
 | `cost_compare(option_ids)` | Read | Sums eligible extracted costs deterministically by currency |
 | `explain_finding(finding_id)` | Read | Explains a current finding belonging to this user |
 | `archive_document(id)` | Write proposal | Creates a pending action; does not archive |
@@ -51,6 +51,12 @@ deterministic Python code; the model must not do arithmetic itself. Values and
 dates must be grounded in the returned document data. Missing information is
 identified rather than guessed. The assistant offers informational guidance,
 not legal, tax, or licensed financial advice.
+
+For `financial_summary()`, `funding` and `remaining_balance_after_funding` use
+aid already posted to a bill. `expected_funding` and
+`remaining_balance_after_expected_funding` show awards not yet matched to bill
+credits as a separate planning view; expected amounts never reduce the billed
+balance.
 
 ## Confirmation gate
 
