@@ -1,4 +1,4 @@
-# ClearLedger — Student Financial Cross-Check
+# EduCash — Student Financial Cross-Check
 
 **Manage scholarships, tuition bills, and study-abroad costs in one place. Catch details worth double-checking and leave with a clearer next step.**
 
@@ -22,6 +22,8 @@ flowchart LR
 ```
 
 The React app authenticates with Supabase Auth. The API verifies the access token, uses the verified user ID to scope every repository operation, and accesses Postgres/private Storage with a server-only service key. **Every database and object-storage operation belongs in [`backend/app/db/repositories.py`](backend/app/db/repositories.py).**
+
+The frontend-to-backend feature mapping and pending API work are tracked in [`docs/api-gaps.md`](docs/api-gaps.md).
 
 ## Deployment
 

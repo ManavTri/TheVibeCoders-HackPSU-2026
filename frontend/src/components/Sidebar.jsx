@@ -7,7 +7,7 @@ const navItems = [
 
 const utilityItems = [{ name: 'Settings', icon: '⚙' }]
 
-export function Sidebar({ activePage, onChange }) {
+export function Sidebar({ activePage, onChange, aidSnapshot = '—' }) {
   return (
     <aside className="w-full border-b border-[#1d232b] bg-[#0a0d11] p-5 backdrop-blur xl:w-72 xl:border-b-0 xl:border-r">
       <div className="mb-8 flex items-center gap-3">
@@ -72,8 +72,8 @@ export function Sidebar({ activePage, onChange }) {
 
       <div className="mt-8 rounded-3xl border border-[#1d232b] bg-[#0f141a] p-4 shadow-sm">
         <p className="text-xs uppercase tracking-[0.2em] text-slate-300">Aid snapshot</p>
-        <p className="mt-3 text-2xl font-semibold text-white">$9,750</p>
-        <p className="mt-1 text-sm text-slate-400">Scholarships and grants</p>
+        <p className="mt-3 text-2xl font-semibold text-white">{aidSnapshot}</p>
+        <p className="mt-1 text-sm text-slate-400">From active award letters</p>
       </div>
     </aside>
   )

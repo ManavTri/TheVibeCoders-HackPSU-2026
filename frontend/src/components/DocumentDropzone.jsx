@@ -31,6 +31,7 @@ export function DocumentDropzone({ onFilesAdded }) {
       <input
         ref={inputRef}
         type="file"
+        accept=".pdf,application/pdf"
         multiple
         className="hidden"
         onChange={(event) => handleFiles(event.target.files)}
@@ -39,7 +40,7 @@ export function DocumentDropzone({ onFilesAdded }) {
         ⤴
       </div>
       <p className="mt-5 text-lg font-medium text-white">Drop files here</p>
-      <p className="mt-2 text-sm text-slate-400">Upload FAFSA docs, tuition invoices, scholarship forms, or bank statements.</p>
+      <p className="mt-2 text-sm text-slate-400">Upload scholarship letters, tuition bills, or study-abroad quotes as PDFs.</p>
       <button
         type="button"
         className="mt-5 rounded-full border border-neutral-600 bg-neutral-800 px-4 py-2 text-sm font-medium text-white"
