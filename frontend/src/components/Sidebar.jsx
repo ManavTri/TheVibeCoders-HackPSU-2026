@@ -13,7 +13,10 @@ export function Sidebar({ activePage, onChange, aidSnapshot = '—' }) {
   return (
     <aside className="w-full border-b border-[#1d232b] bg-[#0a0d11] p-5 backdrop-blur xl:w-72 xl:border-b-0 xl:border-r">
       <div className="mb-8 flex items-center gap-3">
-        <img src={muniLogo} alt="Muni" className="h-11 w-36 rounded-xl bg-white object-cover shadow-sm" />
+        <div className="min-w-0">
+          <img src={muniLogo} alt="Muni" className="h-11 w-36 rounded-xl bg-white object-cover shadow-sm" />
+          <p className="mt-2 text-[10px] font-semibold leading-4 text-[#b8d8ff]">Documents look funi? Save your muni!</p>
+        </div>
       </div>
 
       <nav className="space-y-2">

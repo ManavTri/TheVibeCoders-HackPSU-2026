@@ -21,8 +21,8 @@ export function Auth() {
       <main className="content-page page-wrap auth-page">
         <div className="auth-card">
           <div className="eyebrow">LOCAL DEVELOPMENT</div>
-          <h1>Supabase Auth isn’t configured.</h1>
-          <p>This local demo uses a temporary development identity. Configure Supabase Auth to use accounts.</p>
+        <h1>Authentication isn’t configured.</h1>
+        <p>This local demo uses a temporary development identity. Configure Auth0 or Supabase Auth to use accounts.</p>
           <Link className="button button-primary" to="/dashboard">Continue to the demo <span>↗</span></Link>
         </div>
       </main>

@@ -1,6 +1,8 @@
 # Muni — Student Financial Cross-Check
 
-**Manage scholarships, tuition bills, and study-abroad costs in one place. Catch details worth double-checking and leave with a clearer next step.**
+**Documents look funi? Save your muni!**
+
+Manage scholarships, tuition bills, and study-abroad costs in one place. Catch details worth double-checking and leave with a clearer next step.
 
 Muni extracts labeled fields from student financial PDFs, compares them with explainable validation rules, and helps students prepare questions for their school or award provider. Findings are prompts to verify—not financial advice or eligibility decisions.
 
@@ -24,6 +26,16 @@ flowchart LR
 The React app prefers Auth0 and sends its access token to the FastAPI API. If Auth0 is not fully configured, it falls back to Supabase Auth. The API selects the verifier from the token issuer, uses a deterministic UUID mapping for Auth0 subjects to preserve the existing Supabase UUID foreign keys, and accesses Postgres/private Storage with a server-only service key. Supabase is used for persistence in every deployment and can also provide fallback authentication. **Every database and object-storage operation belongs in [`backend/app/db/repositories.py`](backend/app/db/repositories.py).**
 
 The frontend-to-backend feature mapping and pending API work are tracked in [`docs/api-gaps.md`](docs/api-gaps.md).
+
+## Final submission snapshot
+
+Muni is a student-finance document review workspace. Students can upload financial PDFs, review extracted fields, correct them, compare active documents, inspect explainable findings, and ask the Muni assistant questions grounded in their document library. The interface is intentionally focused on clarity: it surfaces details worth verifying without presenting results as financial advice or eligibility decisions.
+
+- **Authentication:** Auth0 is preferred for the deployed frontend and API. Supabase Auth remains a supported fallback when Auth0 is not fully configured.
+- **Persistence:** Supabase Postgres and private Storage, accessed only through the FastAPI backend.
+- **Extraction:** Local PDF text extraction by default, with optional Gemini-assisted classification and extraction when backend model settings are configured.
+- **Deployment:** Vercel hosts the Vite frontend; Render hosts the FastAPI service. Required provider setup is documented in [`docs/deployment.md`](docs/deployment.md).
+- **Demo flow:** The prepared synthetic scenarios and presentation script are documented in [`docs/demo-script.md`](docs/demo-script.md).
 
 ## Deployment
 
@@ -59,7 +71,7 @@ again after dependency changes because `npm ci` removes and recreates
 
 Open `http://localhost:5173`; backend health is at `http://localhost:8000/health`, and API docs are at `http://localhost:8000/docs`.
 
-For local Supabase-backed development, apply all migrations in timestamp order to your Supabase project, copy `backend/.env.example` to `backend/.env`, set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`, and set `REQUIRE_AUTH=true`. Set `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` on the backend. Copy `frontend/.env.example` to `frontend/.env.local` and set `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, `VITE_AUTH0_AUDIENCE`, and `VITE_API_URL`. Never put service-role, Auth0 client secrets, or LLM secrets in frontend variables.
+For authenticated local development, apply all migrations in timestamp order to your Supabase project, copy `backend/.env.example` to `backend/.env`, set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`, and set `REQUIRE_AUTH=true`. For the preferred Auth0 path, also set `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` on the backend, and set `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, and `VITE_AUTH0_AUDIENCE` in `frontend/.env.local`. If Auth0 is not configured, set the frontend Supabase URL and anon key instead. Always set `VITE_API_URL` to the backend origin. Never put service-role keys, Auth0 client secrets, or LLM secrets in frontend variables.
 
 ## API
 
