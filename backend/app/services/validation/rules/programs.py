@@ -1,3 +1,4 @@
+from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
@@ -57,48 +58,67 @@ def _program_double_charge(context: RuleContext) -> list[Finding]:
             entry
             for entry in context.ledger.estimates
             if entry.document_id == quote.id
-            if entry.kind in {"tuition", "program_fee"}
         ]
-        for bill in bills:
-            if not term_matches(quote.term, bill.term) or quote.currency != bill.currency:
-                continue
-            bill_entries = [
+        for term in sorted(
+            {
+                entry.term
+                for entry in quote_entries
+                if entry.kind == "tuition" and entry.direction == "charge" and entry.term
+            }
+        ):
+            term_quote_entries = [entry for entry in quote_entries if entry.term == term]
+            tuition_entries = [
                 entry
-                for entry in document_entries(context.ledger, bill.id)
+                for entry in term_quote_entries
                 if entry.kind == "tuition" and entry.direction == "charge"
             ]
-            if not quote_entries or not bill_entries:
+            if not tuition_entries:
                 continue
-            quote_total = sum((entry.amount for entry in quote_entries), Decimal(0))
-            bill_total = sum((entry.amount for entry in bill_entries), Decimal(0))
-            findings.append(
-                build_finding(
-                    rule_id="program.double_charge",
-                    severity=Severity.WARNING,
-                    category="amount",
-                    title=f"{quote.term} has tuition in both a program estimate and a home bill",
-                    explanation=(
-                        f"{quote.filename} estimates {format_money(quote_total, quote_entries[0].currency)} "
-                        f"for program tuition, while {bill.filename} bills "
-                        f"{format_money(bill_total, bill_entries[0].currency)} for home tuition in {quote.term}. "
-                        "The estimate may not represent an additional billed charge."
-                    ),
-                    evidence=[
-                        *(evidence_for_entry(entry) for entry in quote_entries),
-                        *(evidence_for_entry(entry) for entry in bill_entries),
-                    ],
-                    suggested_action=(
-                        f"Ask the study-abroad office and billing office whether the {quote.term} program tuition "
-                        "replaces or is added to home-campus tuition."
-                    ),
-                    document_ids=[quote.id, bill.id],
-                    term=quote.term,
-                    impact_amount=quote_total,
-                    confidence="medium",
-                    group_key=f"{quote.term}:{quote.id}:{bill.id}",
-                    fields={"program_estimate": quote_total, "home_tuition_bill": bill_total},
+            for bill in bills:
+                bill_entries = [
+                    entry
+                    for entry in document_entries(context.ledger, bill.id)
+                    if entry.kind == "tuition"
+                    and entry.direction == "charge"
+                    and entry.term == term
+                    and entry.currency == tuition_entries[0].currency
+                ]
+                if not bill_entries:
+                    continue
+                quote_total = sum((entry.amount for entry in tuition_entries), Decimal(0))
+                bill_total = sum((entry.amount for entry in bill_entries), Decimal(0))
+                impact = min(quote_total, bill_total)
+                findings.append(
+                    build_finding(
+                        rule_id="program.double_charge",
+                        severity=Severity.WARNING,
+                        category="amount",
+                        title=f"{term} has tuition in both a program estimate and a home bill",
+                        explanation=(
+                            f"{quote.filename} estimates {format_money(quote_total, tuition_entries[0].currency)} "
+                            f"for program tuition, while {bill.filename} bills "
+                            f"{format_money(bill_total, bill_entries[0].currency)} for home tuition in {term}. "
+                            "The estimate may not represent an additional billed charge."
+                        ),
+                        evidence=[
+                            *(evidence_for_entry(entry) for entry in term_quote_entries),
+                            *(evidence_for_entry(entry) for entry in bill_entries),
+                        ],
+                        suggested_action=(
+                            f"Ask the study-abroad office and billing office whether the {term} program tuition "
+                            "replaces or is added to home-campus tuition."
+                        ),
+                        document_ids=[quote.id, bill.id],
+                        term=term,
+                        impact_amount=impact,
+                        confidence="medium",
+                        group_key=f"{term}:{quote.id}:{bill.id}",
+                        fields={
+                            "program_estimate_tuition": quote_total,
+                            "home_tuition_bill": bill_total,
+                        },
+                    )
                 )
-            )
     return findings
 
 
@@ -120,38 +140,39 @@ def _program_aid_gap(context: RuleContext) -> list[Finding]:
             for entry in context.ledger.estimates
             if entry.document_id == quote.id and entry.direction == "charge"
         ]
-        if not entries or not quote.term:
+        quote_terms = {entry.term for entry in entries if entry.term}
+        if not entries or not quote_terms:
             continue
         covering_awards = [
             award
             for award in awards
-            if term_matches(award.term, quote.term)
-            and any(
-                entry.direction == "credit"
+            if any(
+                entry.direction == "credit" and entry.term in quote_terms
                 for entry in document_entries(context.ledger, award.id)
             )
         ]
         if covering_awards:
             continue
         total = sum((entry.amount for entry in entries), Decimal(0))
+        quote_term = min(quote_terms)
         findings.append(
             build_finding(
                 rule_id="program.aid_gap",
                 severity=Severity.INFO,
                 category="opportunity",
-                title=f"No aid document covers the {quote.term} program estimate",
+                title=f"No aid document covers the {quote_term} program estimate",
                 explanation=(
                     f"{quote.filename} lists program costs totaling "
-                    f"{format_money(total, entries[0].currency)} for {quote.term}, but no uploaded award or "
+                    f"{format_money(total, entries[0].currency)} for {quote_term}, but no uploaded award or "
                     "aid-package document lists aid for that term."
                 ),
                 evidence=[evidence_for_entry(entry) for entry in entries],
                 suggested_action=(
-                    f"Ask the study-abroad financial-aid contact whether existing grants can be applied to {quote.term} "
+                    f"Ask the study-abroad financial-aid contact whether existing grants can be applied to {quote_term} "
                     "and whether a separate aid application is required."
                 ),
                 document_ids=[quote.id],
-                term=quote.term,
+                term=quote_term,
                 impact_amount=total,
                 confidence="medium",
                 group_key=f"{quote.id}:{quote.term}",
@@ -299,49 +320,54 @@ def _housing_comparison(context: RuleContext) -> list[Finding]:
             for entry in document_entries(context.ledger, contract.id)
             if entry.kind == "housing" and entry.direction == "charge"
         ]
+        by_term: dict[str, list] = defaultdict(list)
+        for entry in contract_entries:
+            if entry.term:
+                by_term[entry.term].append(entry)
         for bill in bills:
-            bill_entries = [
+            bill_all = [
                 entry
                 for entry in document_entries(context.ledger, bill.id)
                 if entry.kind == "housing" and entry.direction == "charge"
             ]
-            if (
-                not contract_entries
-                or not bill_entries
-                or not term_matches(contract.term, bill.term)
-                or contract.currency != bill.currency
-            ):
-                continue
-            contract_total = sum((item.amount for item in contract_entries), Decimal(0))
-            bill_total = sum((item.amount for item in bill_entries), Decimal(0))
-            difference = abs(contract_total - bill_total)
-            if difference <= context.config.money_tolerance:
-                continue
-            findings.append(
-                build_finding(
-                    rule_id="housing.contract_vs_bill",
-                    severity=Severity.WARNING,
-                    category="amount",
-                    title=f"{contract.term} housing differs by {format_money(difference, contract_entries[0].currency)}",
-                    explanation=(
-                        f"{contract.filename} lists {format_money(contract_total, contract_entries[0].currency)} "
-                        f"for housing, while {bill.filename} lists "
-                        f"{format_money(bill_total, bill_entries[0].currency)} in housing charges for {contract.term}. "
-                        f"The difference is {format_money(difference, contract_entries[0].currency)}."
-                    ),
-                    evidence=[
-                        *(evidence_for_entry(entry) for entry in contract_entries),
-                        *(evidence_for_entry(entry) for entry in bill_entries),
-                    ],
-                    suggested_action=f"Ask housing and billing offices to reconcile the {contract.term} housing charge.",
-                    document_ids=[contract.id, bill.id],
-                    term=contract.term,
-                    impact_amount=difference,
-                    confidence="high",
-                    group_key=f"{contract.term}:{contract.id}:{bill.id}",
-                    fields={"contract_total": contract_total, "bill_total": bill_total},
+            for term, term_contract_entries in by_term.items():
+                term_bill_entries = [
+                    entry for entry in bill_all
+                    if entry.term == term
+                    and entry.currency == term_contract_entries[0].currency
+                ]
+                if not term_bill_entries:
+                    continue
+                contract_total = sum((item.amount for item in term_contract_entries), Decimal(0))
+                bill_total = sum((item.amount for item in term_bill_entries), Decimal(0))
+                difference = abs(contract_total - bill_total)
+                if difference <= context.config.money_tolerance:
+                    continue
+                findings.append(
+                    build_finding(
+                        rule_id="housing.contract_vs_bill",
+                        severity=Severity.WARNING,
+                        category="amount",
+                        title=f"{term} housing differs by {format_money(difference, term_contract_entries[0].currency)}",
+                        explanation=(
+                            f"{contract.filename} lists {format_money(contract_total, term_contract_entries[0].currency)} "
+                            f"for housing, while {bill.filename} lists "
+                            f"{format_money(bill_total, term_bill_entries[0].currency)} in housing charges for {term}. "
+                            f"The difference is {format_money(difference, term_contract_entries[0].currency)}."
+                        ),
+                        evidence=[
+                            *(evidence_for_entry(entry) for entry in term_contract_entries),
+                            *(evidence_for_entry(entry) for entry in term_bill_entries),
+                        ],
+                        suggested_action=f"Ask housing and billing offices to reconcile the {term} housing charge.",
+                        document_ids=[contract.id, bill.id],
+                        term=term,
+                        impact_amount=difference,
+                        confidence="high",
+                        group_key=f"{term}:{contract.id}:{bill.id}",
+                        fields={"contract_total": contract_total, "bill_total": bill_total},
+                    )
                 )
-            )
     return findings
 
 

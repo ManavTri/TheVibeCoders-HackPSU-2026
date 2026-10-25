@@ -53,6 +53,11 @@ amount is not split evenly or copied across terms. It is stored under
 amount as belonging to any single term. An explicitly multi-term item term is
 also not allocated to one term.
 
+An item-level term is authoritative even when the document-level term is
+unparseable or describes an entire academic year. Rules that compare separate
+documents use those assigned item terms; they do not require the document-level
+labels to match.
+
 ## Ledger and currency semantics
 
 The same rules apply to expected aid disbursements. Explicit per-term
@@ -64,6 +69,14 @@ Money uses `Decimal`, quantized to cents. Each document's currency is
 preserved. The ledger never sums amounts in different currencies. An
 `exchange_rate` is accepted only when the document states it; it is recorded
 as source data but this rule-engine version does not perform conversion.
+
+Only tuition-bill entries contribute billed charges, posted aid, and received
+payments in net balances. Award-letter and aid-package entries are retained as
+cross-check references. Unmatched or under-posted award amounts appear in
+`expected_not_yet_billed`, outside net balance. Unbilled housing commitments
+appear in `committed_not_yet_billed`; payment-plan installments are recorded
+as `scheduled_coverage` and are not treated as received payments. Study-abroad
+quotes remain estimates. These extra buckets retain their own source provenance.
 
 Existing documents may lack term or item metadata. Those documents continue
 to load; missing/unparseable essentials are grouped into one

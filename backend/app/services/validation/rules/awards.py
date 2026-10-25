@@ -182,6 +182,9 @@ def _unsupported_bill_credit(context: RuleContext) -> list[Finding]:
 def _amount_mismatches(context: RuleContext) -> list[Finding]:
     findings: list[Finding] = []
     awards = [doc for doc in context.documents if is_award_type(doc)]
+    bills = [
+        doc for doc in context.documents if doc.document_type == DocumentType.TUITION_BILL
+    ]
     for index, first in enumerate(awards):
         for second in awards[index + 1 :]:
             for first_entry in document_entries(context.ledger, first.id):
@@ -231,6 +234,62 @@ def _amount_mismatches(context: RuleContext) -> list[Finding]:
                             fields={
                                 "first_amount": first_entry.amount,
                                 "second_amount": second_entry.amount,
+                                "difference": difference,
+                            },
+                        )
+                    )
+    for award in awards:
+        for bill in bills:
+            for award_entry in document_entries(context.ledger, award.id):
+                if award_entry.kind not in _AID_KINDS or not award_entry.term:
+                    continue
+                for credit in document_entries(context.ledger, bill.id):
+                    if credit.direction != "credit" or credit.kind not in _AID_KINDS:
+                        continue
+                    if credit.currency != award_entry.currency:
+                        continue
+                    match = match_awards(
+                        name_a=award_entry.label,
+                        term_a=award_entry.term,
+                        amount_a=award_entry.amount,
+                        name_b=credit.label,
+                        term_b=credit.term,
+                        amount_b=credit.amount,
+                        fuzzy_threshold=context.config.fuzzy_match_threshold,
+                    )
+                    difference = abs(award_entry.amount - credit.amount)
+                    if (
+                        match.tier not in {"high", "medium"}
+                        or difference <= context.config.money_tolerance
+                    ):
+                        continue
+                    findings.append(
+                        build_finding(
+                            rule_id="award.amount_mismatch",
+                            severity=Severity.ERROR,
+                            category="amount",
+                            title=f"{award_entry.label} differs by {format_money(difference, award_entry.currency)} for {award_entry.term}",
+                            explanation=(
+                                f"{award.filename} lists {format_money(award_entry.amount, award_entry.currency)} "
+                                f"for {award_entry.term}; {bill.filename} credits "
+                                f"{format_money(credit.amount, credit.currency)} for the same award and term. "
+                                f"The difference is {format_money(difference, award_entry.currency)}."
+                            ),
+                            evidence=[
+                                evidence_for_entry(award_entry),
+                                evidence_for_entry(credit),
+                            ],
+                            suggested_action=(
+                                f"Ask the award provider to confirm the {award_entry.term} amount and request a corrected notice if needed."
+                            ),
+                            document_ids=[award.id, bill.id],
+                            term=award_entry.term,
+                            impact_amount=difference,
+                            confidence=match.tier,
+                            group_key=f"{award_entry.term}:{award_entry.label.casefold()}:{bill.id}",
+                            fields={
+                                "award_amount": award_entry.amount,
+                                "bill_credit": credit.amount,
                                 "difference": difference,
                             },
                         )

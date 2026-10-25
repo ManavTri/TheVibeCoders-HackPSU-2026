@@ -1,8 +1,11 @@
 from app.schemas.documents import FinancialDocument
 from app.schemas.validation import Finding, Severity
+from app.services.validation.normalize import assign_item_term, parse_terms
 from app.services.validation.rules.base import RuleContext
 from app.services.validation.rules.common import (
     build_finding,
+    document_entries,
+    document_lines,
     document_term,
     evidence_for_document,
 )
@@ -41,45 +44,71 @@ def award_conditions_findings(context: RuleContext) -> list[Finding]:
 def _credit_requirement_findings(
     context: RuleContext, award: FinancialDocument, required: int
 ) -> list[Finding]:
-    term = document_term(award)
-    term_value = str(term) if term.is_known else None
-    if term_value is None:
+    award_entries = [
+        entry
+        for entry in document_entries(context.ledger, award.id)
+        if entry.direction == "credit" and entry.term
+    ]
+    terms = sorted({entry.term for entry in award_entries if entry.term})
+    if not terms:
+        terms = [
+            str(term)
+            for term in parse_terms(award.term).terms
+            if term.is_known
+        ]
+    if not terms:
         return []
-    enrollment_records: list[tuple[FinancialDocument, int]] = []
-    for document in context.documents:
-        if document.id == award.id:
-            continue
-        envelope = document.extraction_envelope or {}
-        credits = envelope.get("enrollment_credits")
-        if credits is None:
-            continue
-        other_term = document_term(document)
-        if term_value and other_term.is_known and str(other_term) != term_value:
-            continue
-        try:
-            enrollment_records.append((document, int(credits)))
-        except (TypeError, ValueError):
-            continue
 
-    if enrollment_records:
-        findings: list[Finding] = []
-        for document, enrolled in enrollment_records:
+    findings: list[Finding] = []
+    observed_terms: set[str] = set()
+    for term_value in terms:
+        matching_award_entries = [
+            entry for entry in award_entries if entry.term == term_value
+        ]
+        representative = next(
+            (
+                entry
+                for entry in matching_award_entries
+                if entry.kind == "scholarship"
+            ),
+            matching_award_entries[0] if matching_award_entries else None,
+        )
+        matched_bill = False
+        for document in context.documents:
+            if document.id == award.id:
+                continue
+            envelope = document.extraction_envelope or {}
+            credits = envelope.get("enrollment_credits")
+            if credits is None:
+                continue
+            document_terms = _document_term_values(document)
+            if term_value not in document_terms:
+                continue
+            matched_bill = True
+            observed_terms.add(term_value)
+            try:
+                enrolled = int(credits)
+            except (TypeError, ValueError):
+                continue
             if enrolled >= required:
                 continue
             evidence = [
                 evidence_for_document(
-                    award,
-                    "required_credits",
-                    "Minimum required credits",
-                    required,
+                    award, "required_credits", "Minimum required credits", required
                 ),
                 evidence_for_document(
-                    document,
-                    "enrollment_credits",
-                    "Reported enrolled credits",
-                    enrolled,
+                    document, "enrollment_credits", "Reported enrolled credits", enrolled
                 ),
             ]
+            if representative:
+                evidence.append(
+                    evidence_for_document(
+                        award,
+                        "line_items",
+                        representative.label,
+                        representative.amount,
+                    )
+                )
             findings.append(
                 build_finding(
                     rule_id="eligibility.credit_requirement",
@@ -87,62 +116,73 @@ def _credit_requirement_findings(
                     category="eligibility",
                     title=f"{document.filename} reports {enrolled} credits, below the {required}-credit award requirement",
                     explanation=(
-                        f"{award.filename} requires at least {required} credits"
-                        + (f" for {term_value}" if term_value else "")
-                        + f"; {document.filename} reports enrollment of {enrolled} credits. This may affect award eligibility."
+                        f"{award.filename} requires at least {required} credits for {term_value}; "
+                        f"{document.filename} reports enrollment of {enrolled} credits. "
+                        "This may affect award eligibility."
                     ),
                     evidence=evidence,
                     suggested_action=(
-                        f"Confirm your registered credit total with the registrar and ask the award provider whether "
+                        "Confirm your registered credit total with the registrar and ask the award provider whether "
                         f"{required} credits are required by the term's add/drop deadline."
                     ),
                     document_ids=[award.id, document.id],
                     term=term_value,
-                    impact_amount=None,
+                    impact_amount=representative.amount if representative else None,
                     confidence="high",
                     group_key=f"{award.id}:{term_value}:{document.id}",
-                    fields={"required_credits": required, "enrollment_credits": enrolled},
+                    fields={
+                        "required_credits": required,
+                        "enrollment_credits": enrolled,
+                    },
                 )
             )
-        return findings
+        if not matched_bill:
+            findings.append(
+                build_finding(
+                    rule_id="eligibility.credit_requirement",
+                    severity=Severity.INFO,
+                    category="eligibility",
+                    title=f"Verify the {required}-credit requirement for {term_value}",
+                    explanation=(
+                        f"{award.filename} requires at least {required} credits for {term_value}, "
+                        "but no uploaded document states the student's enrolled credits."
+                    ),
+                    evidence=[
+                        evidence_for_document(
+                            award, "required_credits", "Minimum required credits", required
+                        )
+                    ],
+                    suggested_action=(
+                        "Check your registered credits with the registrar and confirm the minimum with the award provider "
+                        f"before the {term_value} enrollment deadline."
+                    ),
+                    document_ids=[award.id],
+                    term=term_value,
+                    confidence="medium",
+                    group_key=f"{award.id}:{term_value}:credits-unverified",
+                    fields={"required_credits": required, "enrollment_credits": None},
+                )
+            )
+    return findings
 
-    conditions = envelope_conditions(award.extraction_envelope or {})
-    evidence = [
-        evidence_for_document(
-            award,
-            "required_credits",
-            "Minimum required credits",
-            required,
+
+def _document_term_values(document: FinancialDocument) -> set[str]:
+    envelope = document.extraction_envelope or {}
+    values: set[str] = set()
+    for line_item in document_lines(document):
+        assignment = assign_item_term(
+            item_term=line_item.term,
+            document_term=document.term,
+            document_terms=envelope.get("terms", []),
+            item_date=line_item.date,
         )
-    ]
-    if conditions:
-        evidence.extend(
-            evidence_for_document(award, "conditions", "Award condition", condition)
-            for condition in conditions
+        if assignment.term and assignment.term.is_known:
+            values.add(str(assignment.term))
+    if not values:
+        values.update(
+            str(term) for term in parse_terms(document.term).terms if term.is_known
         )
-    return [
-        build_finding(
-            rule_id="eligibility.credit_requirement",
-            severity=Severity.INFO,
-            category="eligibility",
-            title=f"Verify the {required}-credit requirement for {term_value or award.filename}",
-            explanation=(
-                f"{award.filename} requires at least {required} credits"
-                + (f" for {term_value}" if term_value else "")
-                + ", but no uploaded document states the student's enrolled credits."
-            ),
-            evidence=evidence,
-            suggested_action=(
-                "Check your registered credits with the registrar and confirm the minimum with the award provider"
-                + (f" before the {term_value} enrollment deadline." if term_value else ".")
-            ),
-            document_ids=[award.id],
-            term=term_value,
-            confidence="medium",
-            group_key=f"{award.id}:{term_value}:credits-unverified",
-            fields={"required_credits": required, "enrollment_credits": None},
-        )
-    ]
+    return values
 
 
 def _conditions_finding(

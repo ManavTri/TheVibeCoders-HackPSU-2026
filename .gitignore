@@ -18,6 +18,7 @@ dist/
 !.env.example
 backend/.env
 frontend/.env
+backend/.scenario3-out/
 *.log
 
 # Editors and OS

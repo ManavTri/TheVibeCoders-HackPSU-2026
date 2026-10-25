@@ -55,8 +55,9 @@ def document_entries(ledger: Ledger, document_id: str) -> list[LedgerEntry]:
     return [
         entry
         for totals in ledger.total.values()
-        for entry in totals.entries
+        for entry in (*totals.entries, *totals.reference_entries)
         if entry.document_id == document_id
+        and entry.source != "expected_not_yet_billed"
     ]
 
 

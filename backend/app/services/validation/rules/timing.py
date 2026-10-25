@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from app.schemas.documents import DocumentType
 from app.schemas.validation import Finding, Severity
-from app.services.validation.normalize import assign_item_term
+from app.services.validation.normalize import assign_item_term, parse_term
 from app.services.validation.rules.base import RuleContext
 from app.services.validation.rules.common import (
     build_finding,
@@ -22,6 +22,10 @@ def timing_findings(context: RuleContext) -> list[Finding]:
 def _deadline_status(context: RuleContext) -> list[Finding]:
     deduplicated: dict[tuple[str, date], list] = defaultdict(list)
     for document, label, due_date, term in deadline_records(context.documents):
+        if _is_payment_due_date(document, due_date):
+            balance = _term_balance(context, term, document.currency)
+            if balance is None or balance.net_balance <= context.config.money_tolerance:
+                continue
         deduplicated[(label.casefold(), due_date)].append((document, label, term))
     findings: list[Finding] = []
     for (normalized_label, due_date), records in deduplicated.items():
@@ -37,6 +41,39 @@ def _deadline_status(context: RuleContext) -> list[Finding]:
         else:
             severity = Severity.INFO
             status = f"is due in {days} day(s)"
+        payment_records = [
+            document
+            for document, _, _ in records
+            if _is_payment_due_date(document, due_date)
+        ]
+        if payment_records:
+            expected_aid = max(
+                (
+                    _term_balance(context, term, document.currency).expected_not_yet_billed
+                    for document, _, term in records
+                    if _is_payment_due_date(document, due_date)
+                    and _term_balance(context, term, document.currency) is not None
+                ),
+                key=lambda entries: sum((entry.amount for entry in entries), Decimal(0)),
+                default=[],
+            )
+            if expected_aid:
+                term_balance = next(
+                    (
+                        _term_balance(context, term, document.currency)
+                        for document, _, term in records
+                        if _is_payment_due_date(document, due_date)
+                        and _term_balance(context, term, document.currency) is not None
+                    ),
+                    None,
+                )
+                expected_total = sum((entry.amount for entry in expected_aid), Decimal(0))
+                if term_balance and expected_total >= term_balance.net_balance:
+                    severity = {
+                        Severity.ERROR: Severity.WARNING,
+                        Severity.WARNING: Severity.INFO,
+                        Severity.INFO: Severity.INFO,
+                    }[severity]
         display_label = records[0][1]
         term = next((record[2] for record in records if record[2]), None)
         evidence = [
@@ -68,6 +105,25 @@ def _deadline_status(context: RuleContext) -> list[Finding]:
             )
         )
     return findings
+
+
+def _is_payment_due_date(document, due_date: date) -> bool:
+    for item in (document.extraction_envelope or {}).get("payment_due_dates", []):
+        if not isinstance(item, dict) or not item.get("date"):
+            continue
+        try:
+            if date.fromisoformat(str(item["date"])) == due_date:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _term_balance(context: RuleContext, term_value: str | None, currency: str):
+    term = parse_term(term_value)
+    if not term.is_known:
+        return None
+    return context.ledger.terms.get(str(term), {}).get(currency)
 
 
 def _disbursement_after_due(context: RuleContext) -> list[Finding]:

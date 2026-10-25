@@ -1,4 +1,5 @@
 from app.schemas.validation import Finding, Severity
+from app.services.validation.normalize import assign_item_term, parse_terms
 from app.services.validation.rules.base import RuleContext
 from app.services.validation.rules.common import (
     build_finding,
@@ -14,12 +15,29 @@ def quality_findings(context: RuleContext) -> list[Finding]:
         missing: list[str] = []
         evidence = []
         term = document_term(document)
-        if not term.is_known:
+        envelope = document.extraction_envelope or {}
+        item_terms = [
+            assign_item_term(
+                item_term=item.term,
+                document_term=document.term,
+                document_terms=envelope.get("terms", []),
+                item_date=item.date,
+            ).term
+            for item in document_lines(document)
+        ]
+        has_term_evidence = term.is_known or any(
+            item_term and item_term.is_known for item_term in item_terms
+        ) or any(
+            parsed.is_known
+            for raw_term in envelope.get("terms", [])
+            if isinstance(raw_term, str)
+            for parsed in parse_terms(raw_term).terms
+        )
+        if not has_term_evidence:
             missing.append("an explicit, parseable academic term")
             evidence.append(
                 evidence_for_document(document, "term", "Academic term", document.term)
             )
-        envelope = document.extraction_envelope or {}
         has_amount = (
             document.amount is not None
             or envelope.get("total_amount") is not None

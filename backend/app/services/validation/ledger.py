@@ -56,6 +56,10 @@ class LedgerTotals:
     payments: Decimal = Decimal(0)
     expected_disbursements: list[LedgerEntry] = field(default_factory=list)
     entries: list[LedgerEntry] = field(default_factory=list)
+    reference_entries: list[LedgerEntry] = field(default_factory=list)
+    expected_not_yet_billed: list[LedgerEntry] = field(default_factory=list)
+    committed_not_yet_billed: list[LedgerEntry] = field(default_factory=list)
+    scheduled_coverage: list[LedgerEntry] = field(default_factory=list)
 
     @property
     def charges(self) -> Decimal:
@@ -96,6 +100,11 @@ class LedgerTotals:
                 self.aid_by_kind.get(entry.kind, Decimal(0)) + entry.amount
             )
 
+    def add_reference(self, entry: LedgerEntry, bucket: str) -> None:
+        self.reference_entries.append(entry)
+        if bucket != "reference_entries":
+            getattr(self, bucket).append(entry)
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "term": self.term,
@@ -108,6 +117,20 @@ class LedgerTotals:
             "expected_disbursements": [
                 entry.as_dict() for entry in self.expected_disbursements
             ],
+            "expected_not_yet_billed": [
+                entry.as_dict() for entry in self.expected_not_yet_billed
+            ],
+            "committed_not_yet_billed": [
+                entry.as_dict() for entry in self.committed_not_yet_billed
+            ],
+            "scheduled_coverage": [
+                entry.as_dict() for entry in self.scheduled_coverage
+            ],
+            "scheduled_coverage_total": str(
+                quantize_money(
+                    sum((entry.amount for entry in self.scheduled_coverage), Decimal(0))
+                )
+            ),
             "net_balance": str(self.net_balance),
             "coverage_ratio": (
                 str(self.coverage_ratio.quantize(Decimal("0.0001")))
@@ -117,6 +140,9 @@ class LedgerTotals:
             "gap": str(quantize_money(self.gap)),
             "surplus": str(quantize_money(self.surplus)),
             "provenance": [entry.as_dict() for entry in self.entries],
+            "reference_entries": [
+                entry.as_dict() for entry in self.reference_entries
+            ],
         }
 
 
@@ -246,6 +272,10 @@ def build_ledger(
     annual: dict[str, dict[str, LedgerTotals]] = {}
     total: dict[str, LedgerTotals] = {}
     estimates: list[LedgerEntry] = []
+    actual_bill_entries: list[LedgerEntry] = []
+    reference_entries: list[tuple[LedgerEntry, str]] = []
+    scheduled_entries: list[LedgerEntry] = []
+    document_years = {document.id: _year_key(document) for document in documents}
 
     for document in documents:
         envelope = document.extraction_envelope or {}
@@ -268,8 +298,6 @@ def build_ledger(
         disbursements = envelope.get("disbursements", [])
         if not isinstance(disbursements, list):
             disbursements = []
-        document_entries: list[LedgerEntry] = []
-
         for item in items:
             classification = classify_line_item(item)
             is_estimate = _is_estimate(document, item)
@@ -294,14 +322,32 @@ def build_ledger(
                 kind=classification.kind,
                 direction=classification.direction,
                 term=term_name,
-                source="line_item",
+                source=(
+                    "billed_line_item"
+                    if document.document_type == DocumentType.TUITION_BILL
+                    else "line_item"
+                ),
                 confidence=classification.confidence,
                 entry_date=item.date,
             )
             if is_estimate:
                 estimates.append(item_entry)
             elif classification.direction != "unknown":
-                document_entries.append(item_entry)
+                if document.document_type == DocumentType.TUITION_BILL:
+                    actual_bill_entries.append(item_entry)
+                elif document.document_type in {
+                    DocumentType.AWARD_LETTER,
+                    DocumentType.FINANCIAL_AID_PACKAGE,
+                    DocumentType.LOAN_OFFER,
+                }:
+                    reference_entries.append((item_entry, "expected_not_yet_billed"))
+                elif document.document_type == DocumentType.HOUSING_CONTRACT:
+                    reference_entries.append((item_entry, "committed_not_yet_billed"))
+                elif document.document_type == DocumentType.PAYMENT_PLAN:
+                    scheduled_entries.append(item_entry)
+                    reference_entries.append((item_entry, "scheduled_coverage"))
+                else:
+                    reference_entries.append((item_entry, "committed_not_yet_billed"))
 
         if not items:
             legacy = _legacy_entry(document, currency)
@@ -325,8 +371,21 @@ def build_ledger(
                 )
                 if _is_estimate(document):
                     estimates.append(legacy)
+                elif document.document_type == DocumentType.TUITION_BILL:
+                    actual_bill_entries.append(legacy)
+                elif document.document_type in {
+                    DocumentType.AWARD_LETTER,
+                    DocumentType.FINANCIAL_AID_PACKAGE,
+                    DocumentType.LOAN_OFFER,
+                }:
+                    reference_entries.append((legacy, "expected_not_yet_billed"))
+                elif document.document_type == DocumentType.HOUSING_CONTRACT:
+                    reference_entries.append((legacy, "committed_not_yet_billed"))
+                elif document.document_type == DocumentType.PAYMENT_PLAN:
+                    reference_entries.append((legacy, "scheduled_coverage"))
+                    scheduled_entries.append(legacy)
                 else:
-                    document_entries.append(legacy)
+                    reference_entries.append((legacy, "committed_not_yet_billed"))
 
         for raw_disbursement in disbursements:
             if not isinstance(raw_disbursement, dict) or raw_disbursement.get("amount") is None:
@@ -372,24 +431,91 @@ def build_ledger(
             total.setdefault(currency, LedgerTotals(None, currency)).expected_disbursements.append(
                 disbursement
             )
-            if not items and not any(
-                entry.source == "legacy_document_amount" for entry in document_entries
-            ):
-                document_entries.append(disbursement)
-            elif assignment.term and assignment.term.is_known:
+            if assignment.term and assignment.term.is_known:
                 term_totals = _get_buckets(terms, str(assignment.term), currency)
                 term_totals.expected_disbursements.append(disbursement)
             elif assignment.annual_unallocated:
                 year = _year_key(document)
                 _get_buckets(annual, year, currency).expected_disbursements.append(disbursement)
 
-        for entry in document_entries:
-            total.setdefault(entry.currency, LedgerTotals(None, entry.currency)).add(entry)
-            if entry.term is not None:
-                _get_buckets(terms, entry.term, entry.currency).add(entry)
-            elif document.term or document_terms:
-                year = _year_key(document)
-                _get_buckets(annual, year, entry.currency).add(entry)
+    bill_credits = [
+        entry for entry in actual_bill_entries if entry.direction == "credit"
+    ]
+    for entry in actual_bill_entries:
+        total.setdefault(entry.currency, LedgerTotals(None, entry.currency)).add(entry)
+        if entry.term is not None:
+            _get_buckets(terms, entry.term, entry.currency).add(entry)
+        elif document_years.get(entry.document_id) != "unknown":
+            _get_buckets(
+                annual, document_years[entry.document_id], entry.currency
+            ).add(entry)
+
+    bill_housing_keys = {
+        (entry.term, entry.currency)
+        for entry in actual_bill_entries
+        if entry.kind == "housing" and entry.direction == "charge"
+    }
+    for entry, bucket in reference_entries:
+        target_bucket = "reference_entries"
+        if bucket == "committed_not_yet_billed" and entry.kind == "housing":
+            if (entry.term, entry.currency) in bill_housing_keys:
+                target_bucket = "reference_entries"
+            else:
+                target_bucket = "committed_not_yet_billed"
+        if bucket == "expected_not_yet_billed":
+            matching_credits = []
+            for credit in bill_credits:
+                from app.services.validation.normalize import match_awards
+
+                match = match_awards(
+                    name_a=entry.label,
+                    term_a=entry.term,
+                    amount_a=entry.amount,
+                    name_b=credit.label,
+                    term_b=credit.term,
+                    amount_b=credit.amount,
+                )
+                if (
+                    entry.currency == credit.currency
+                    and entry.kind == credit.kind
+                    and match.tier in {"high", "medium"}
+                ):
+                    matching_credits.append(credit)
+            billed_amount = sum(
+                (credit.amount for credit in matching_credits), Decimal(0)
+            )
+            unbilled_amount = max(Decimal(0), entry.amount - billed_amount)
+            if unbilled_amount > 0:
+                expected_entry = LedgerEntry(
+                    **{
+                        **entry.__dict__,
+                        "amount": quantize_money(unbilled_amount),
+                        "source": "expected_not_yet_billed",
+                    }
+                )
+                _store_reference(
+                    expected_entry,
+                    "expected_not_yet_billed",
+                    total,
+                    terms,
+                    annual,
+                    document_years.get(entry.document_id),
+                )
+        if bucket == "scheduled_coverage":
+            target_bucket = "scheduled_coverage"
+        _store_reference(
+            entry,
+            target_bucket,
+            total,
+            terms,
+            annual,
+            document_years.get(entry.document_id),
+        )
+
+    for entry in scheduled_entries:
+        total.setdefault(entry.currency, LedgerTotals(None, entry.currency))
+        if entry.term is not None:
+            _get_buckets(terms, entry.term, entry.currency)
 
     for currencies in terms.values():
         for totals in currencies.values():
@@ -397,3 +523,20 @@ def build_ledger(
     for totals in total.values():
         totals.expected_disbursements.sort(key=lambda entry: entry.date or "")
     return Ledger(terms=terms, total=total, annual_unallocated=annual, estimates=estimates)
+
+
+def _store_reference(
+    entry: LedgerEntry,
+    bucket: str,
+    total: dict[str, LedgerTotals],
+    terms: dict[str, dict[str, LedgerTotals]],
+    annual: dict[str, dict[str, LedgerTotals]],
+    year: str | None,
+) -> None:
+    total.setdefault(entry.currency, LedgerTotals(None, entry.currency)).add_reference(
+        entry, bucket
+    )
+    if entry.term is not None:
+        _get_buckets(terms, entry.term, entry.currency).add_reference(entry, bucket)
+    elif year and year != "unknown":
+        _get_buckets(annual, year, entry.currency).add_reference(entry, bucket)

@@ -30,6 +30,11 @@ from app.services.validation.normalize import (
         ("Academic Year 2026-2027", ["Fall 2026", "Spring 2027"]),
         ("AY 26-27", ["Fall 2026", "Spring 2027"]),
         ("2026-27", ["Fall 2026", "Spring 2027"]),
+        ("2026-2027 Academic Year", ["Fall 2026", "Spring 2027"]),
+        ("2026-27 Academic Year", ["Fall 2026", "Spring 2027"]),
+        ("Spring Semester 2027", ["Spring 2027"]),
+        ("SP27", ["Spring 2027"]),
+        ("SU27", ["Summer 2027"]),
     ],
 )
 def test_parse_term_formats(value: str, expected: list[str]) -> None:
