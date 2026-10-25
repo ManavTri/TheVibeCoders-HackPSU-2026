@@ -21,7 +21,7 @@ Use the provided synthetic PDFs only. For a local demo, leave backend Supabase s
 
 **2:15–2:40 — Manage documents.** Return to the overview to show the per-user document library and delete control. Explain that documents are stored in a private bucket, protected by user-scoped access, and can be deleted.
 
-**2:40–3:00 — Responsible scope.** “Only synthetic documents in this demo. Extraction reads selectable PDF text; image-only PDFs need OCR. The insight summary is deterministic, not financial or eligibility advice.”
+**2:40–3:00 — Responsible scope.** “Only synthetic documents in this demo. When configured, Gemini classifies and extracts explicitly stated fields; otherwise the local parser is used. Image-only PDFs need OCR. The insight summary is deterministic, not financial or eligibility advice.”
 
 ## Study-abroad scenario
 

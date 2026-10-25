@@ -15,7 +15,7 @@ flowchart LR
   Verify --> Repo[Repository boundary]
   Repo --> DB[(Supabase Postgres)]
   Repo --> Storage[Private Supabase Storage]
-  API --> Extract[PDF field extraction]
+  API --> Extract[Gemini extraction with parser fallback]
   Extract --> Rules[Validation rule engine]
   Rules --> DB
   API --> Web
@@ -29,7 +29,7 @@ The frontend-to-backend feature mapping and pending API work are tracked in [`do
 
 - Backend: Render blueprint in [`render.yaml`](render.yaml).
 - Frontend: Vercel project rooted at `frontend/`, with SPA rewrites in [`frontend/vercel.json`](frontend/vercel.json).
-- Database, Auth, and private document storage: Supabase migration in [`backend/supabase/migrations/20261024000000_initial_schema.sql`](backend/supabase/migrations/20261024000000_initial_schema.sql).
+- Database, Auth, and private document storage: apply the Supabase migrations in [`backend/supabase/migrations/`](backend/supabase/migrations/) in timestamp order.
 - Step-by-step provider setup, secrets, and smoke checks: [deployment guide](docs/deployment.md).
 - **Live demo:** not published yet. Deploy the Render Blueprint and Vercel project using the deployment guide, then add their public URLs here.
 
@@ -39,21 +39,21 @@ Provider accounts and secrets are not available in this workspace, so the deploy
 
 Requirements: Python 3.11+, Node.js 22+, npm. Local API mode uses in-memory repositories if Supabase credentials are absent. For authenticated local development, configure a Supabase project and copy the app-specific env examples.
 
-```powershell
-# Terminal 1 — backend
-Set-Location backend
+```bash
+# Terminal 1 — backend (WSL/Linux)
+cd backend
 python -m pip install -e ".[test]"
 python -m uvicorn app.main:app --reload
 
 # Terminal 2 — frontend
-Set-Location frontend
+cd frontend
 npm ci
 npm run dev
 ```
 
 Open `http://localhost:5173`; backend health is at `http://localhost:8000/health`, and API docs are at `http://localhost:8000/docs`.
 
-For local Supabase-backed development, apply the migration to your Supabase project, copy `backend/.env.example` to `backend/.env`, set its Supabase values, and set `REQUIRE_AUTH=true`. Copy `frontend/.env.example` to `frontend/.env.local` and set the Supabase URL and anon/publishable key. Never put service-role or LLM secrets in frontend variables.
+For local Supabase-backed development, apply all migrations in timestamp order to your Supabase project, copy `backend/.env.example` to `backend/.env`, set its Supabase values, and set `REQUIRE_AUTH=true`. Set `LLM_API_KEY` and `LLM_MODEL` on the backend only if you want Gemini extraction; no model is selected by default. Copy `frontend/.env.example` to `frontend/.env.local` and set the Supabase URL and anon/publishable key. Never put service-role or LLM secrets in frontend variables.
 
 ## API
 
@@ -61,10 +61,11 @@ All API paths are prefixed by `/api`.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/documents` | Upload a PDF to private Storage, create a document row, and extract fields |
+| `POST` | `/documents` | Upload a PDF to private Storage, optionally accept a user-selected type, and classify/extract fields |
 | `GET` | `/documents?state=active\|archived\|deleted` | List documents in the selected state (defaults to active) |
 | `GET` | `/documents/{id}` | Read document fields and extraction status |
 | `PATCH` | `/documents/{id}` | Correct extracted fields |
+| `POST` | `/documents/{id}/reextract` | Re-run extraction while retaining user-corrected fields |
 | `POST` | `/documents/{id}/archive` | Archive a document without removing its file |
 | `POST` | `/documents/{id}/restore` | Restore an archived or soft-deleted document |
 | `POST` | `/documents/{id}/delete` | Soft-delete a document without removing its file |
@@ -83,6 +84,7 @@ The upload UI performs a validation using only the newly uploaded, successfully 
 - `make seed` — locate the synthetic sample files.
 - `cd frontend && npm run build` — type-check and build the frontend.
 - `cd backend && ruff check app tests` — lint the backend.
+- `cd backend && python scripts/eval_extraction.py` — optionally compare Gemini extraction against synthetic scenario rules; exits with a skip message if `LLM_API_KEY` or `LLM_MODEL` is unset.
 
 ## Synthetic demo data
 
@@ -93,7 +95,8 @@ Use only PDFs under `sample_docs/`. Scenario 1 intentionally disagrees on term, 
 - Supabase is the production persistence path; local development falls back to in-memory repositories only when backend Supabase credentials are absent.
 - Uploaded PDFs are stored in a private bucket, scoped under the authenticated user's ID. The backend checks ownership and deletes the Storage object as part of document deletion.
 - The API uses a server-only Supabase service key; Supabase Auth access tokens are verified server-side. Production mode refuses to start without auth and Supabase configuration.
-- Extraction uses embedded PDF text and explicit labels. Image-only PDFs fail extraction; OCR is not implemented. `LLM_API_KEY` is reserved for a future configured LLM adapter and is not currently used.
+- When `LLM_API_KEY` and `LLM_MODEL` are configured, the backend sends the PDF bytes to Gemini for one structured classification-and-extraction call. Gemini failures, timeouts, rate limits, server errors, and invalid responses fall back to the local PDF text parser. Without an API key/model, the parser is used directly. Image-only PDFs fail extraction; OCR is not implemented.
+- Gemini receives PDF bytes separately from its instructions; PDF text is treated as untrusted data. Prompts prohibit extracting SSNs, bank/card numbers, government IDs, student IDs, and home addresses. The application does not store extracted PDF text or log the model output. Review Google's API data-handling terms before sending real financial documents.
 - Insight summaries are deterministic rules-based prompts; no document text is sent to an LLM.
 - Use synthetic data for demos and development. Real financial records need a reviewed retention, deletion, backup, incident-response, and compliance policy before launch.
 
