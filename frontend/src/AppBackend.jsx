@@ -29,7 +29,18 @@ const documentTypes = [
 
 function formatMoney(amount, currency = 'USD') {
   if (amount === null || amount === undefined || amount === '') return '—'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Number(amount))
+  const numericAmount = Number(amount)
+  if (!Number.isFinite(numericAmount)) return '—'
+
+  const currencyCode = typeof currency === 'string' && /^[A-Za-z]{3}$/.test(currency.trim())
+    ? currency.trim().toUpperCase()
+    : 'USD'
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(numericAmount)
+  } catch (error) {
+    if (!(error instanceof RangeError)) throw error
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(numericAmount)
+  }
 }
 
 function formatDate(value) {
