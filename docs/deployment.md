@@ -5,7 +5,7 @@ Deployment files are checked in (`render.yaml` and `frontend/vercel.json`), but 
 ## 1. Create and configure Supabase
 
 1. Create a Supabase project and enable email/password sign-in under **Authentication → Providers**.
-2. Open **SQL Editor**, paste and run the contents of `backend/supabase/migrations/20261024000000_initial_schema.sql`.
+2. Open **SQL Editor**, paste and run the contents of each migration under `backend/supabase/migrations/` in timestamp order. This includes the document-type constraint migration; do not skip migrations.
 3. In **Authentication → URL Configuration**, set the Site URL to the Vercel URL once known. Add local `http://localhost:5173` and the production Vercel URL to Redirect URLs.
 4. In **Project Settings → API**, record the project URL, public anon/publishable key, backend service-role/service key, and the HS256 JWT secret. Confirm that the project issues HS256 tokens accepted by `SUPABASE_JWT_SECRET`; newer asymmetric signing keys require a matching verifier implementation and must not be silently treated as HS256.
 5. Keep the `student-documents` bucket private. The SQL migration creates it with a 10 MB PDF limit and adds user-path policies.
@@ -25,7 +25,9 @@ Deployment files are checked in (`render.yaml` and `frontend/vercel.json`), but 
    | `CORS_ORIGINS` | Exact Vercel origin, e.g. `https://clearledger-example.vercel.app` |
    | `SUPABASE_STORAGE_BUCKET` | `student-documents` (set by the blueprint) |
    | `MAX_UPLOAD_MB` | `10` (set by the blueprint) |
-   | `LLM_API_KEY` | Optional; currently unused by the rules-based insights adapter |
+   | `LLM_API_KEY` | Optional Gemini API key; keep backend-only |
+   | `LLM_MODEL` | Optional model name supported by the configured Gemini API key; there is no built-in default |
+   | `LLM_TIMEOUT_SECONDS` | Optional request timeout in seconds; defaults to `45` |
 
 3. Wait for the Render service to become healthy. Check `https://<render-service>.onrender.com/health`.
 4. Copy the API origin (without `/api`) for Vercel's `VITE_API_URL`.
@@ -51,9 +53,9 @@ Only Supabase's public anon/publishable key belongs in Vercel variables. Do **no
 
 ## 4. Local and release checks
 
-Run backend tests and lint from `backend/`:
+Run backend tests and lint from `backend/` (for example, in WSL/Linux):
 
-```powershell
+```bash
 python -m pip install -e ".[test]" ruff
 python -m pytest
 ruff check app tests
@@ -61,7 +63,7 @@ ruff check app tests
 
 Run the frontend build from `frontend/`:
 
-```powershell
+```bash
 npm ci
 npm run build
 npm audit --audit-level=moderate

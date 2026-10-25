@@ -7,7 +7,8 @@ flowchart LR
   Vercel -->|Bearer token + API request| Render[Render: FastAPI]
   Render --> Verify[Verify JWT]
   Verify --> Routes[API routes]
-  Routes --> Extract[PDF text extraction]
+  Routes --> Extract[Gemini classification and extraction]
+  Extract --> Fallback[PDF text parser fallback]
   Routes --> Rules[Independent validation rules]
   Routes --> Repositories[db/repositories.py]
   Repositories --> Postgres[(Supabase Postgres)]
@@ -28,15 +29,16 @@ flowchart LR
 ## Request flow
 
 1. The frontend signs a student in with Supabase Auth and attaches the access token to API requests.
-2. `POST /api/documents` validates and uploads a PDF, stores document metadata, extracts selectable text, and persists the typed fields in `documents.extracted_json`.
+2. `POST /api/documents` validates and uploads a PDF, stores document metadata, and runs one structured Gemini classification/extraction call when configured; otherwise, or on a handled Gemini failure, it uses the selectable-text parser fallback. The full envelope and legacy fields are persisted in `documents.extracted_json`.
 3. The student can correct parsed values with `PATCH /api/documents/{id}`.
-4. `POST /api/validations` loads the student's extracted documents from the repository and runs the independent rule objects.
-5. The run and findings are saved to Postgres. `GET /api/validations/{run_id}` powers the report; `POST /api/insights` returns deterministic follow-up suggestions.
-6. `DELETE /api/documents/{id}` removes the user's private Storage object and Postgres row.
+4. `POST /api/documents/{id}/reextract` repeats extraction without replacing user-edited fields.
+5. `POST /api/validations` loads the student's extracted documents from the repository and runs the independent rule objects.
+6. The run and findings are saved to Postgres. `GET /api/validations/{run_id}` powers the report; `POST /api/insights` returns deterministic follow-up suggestions.
+7. `DELETE /api/documents/{id}` removes the user's private Storage object and Postgres row.
 
 ## Extraction and insights
 
-The PDF extractor reads selectable text and uses explicit labels and dates; it never invents missing values. Image-only PDFs are marked `failed`. OCR is not included. Insights are deterministic templates based on findings, not an LLM call. `LLM_API_KEY` is reserved for a future reviewed adapter; the current application does not transmit financial documents to a model.
+When `LLM_API_KEY` and `LLM_MODEL` are configured, Gemini receives the PDF bytes as a PDF part separate from its instructions and returns a structured document envelope. The prompt treats PDF contents as untrusted data and prohibits collecting SSNs, bank/card numbers, government IDs, student IDs, or home addresses. Values must be present in the document; totals are not calculated and missing values are not inferred. Timeouts, 429/5xx responses, and invalid output fall back to the PDF text parser. Without an API key and model, the parser is used directly. Image-only PDFs are marked `failed`; OCR is not included. Extraction logs contain IDs, duration, source, and error class only; they never include document text or model output. Insights remain deterministic templates based on findings, not an LLM call.
 
 ## Persistence modes
 

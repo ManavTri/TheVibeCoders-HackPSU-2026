@@ -29,3 +29,7 @@ services:
         sync: false
       - key: LLM_API_KEY
         sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: LLM_TIMEOUT_SECONDS
+        value: "45"
