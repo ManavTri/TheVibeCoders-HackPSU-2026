@@ -3,6 +3,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api.routes.ai import get_ai_client
@@ -305,18 +306,73 @@ def test_iteration_cap_limits_model_calls(client, monkeypatch) -> None:
     assert len(fake.models.calls) == agent.MAX_ITERATIONS
 
 
-def test_rate_limit_rejects_request_21(client, monkeypatch) -> None:
-    fake = FakeClient([text_response("Please add a document first.") for _ in range(21)])
+def test_rate_limit_rejects_request_six(client, monkeypatch) -> None:
+    fake = FakeClient([text_response("Please add a document first.") for _ in range(6)])
     install_fake(client, fake, monkeypatch)
 
     responses = [
         client.post("/api/ai/chat", json={"message": "What can you help with?"})
-        for _ in range(21)
+        for _ in range(6)
     ]
 
-    assert all(response.status_code == 200 for response in responses[:20])
+    assert all(response.status_code == 200 for response in responses[:5])
     assert responses[-1].status_code == 429
     assert int(responses[-1].headers["Retry-After"]) > 0
+
+
+def test_recheck_is_confirmation_gated_and_returns_saved_report_id(
+    client, monkeypatch
+) -> None:
+    award = upload(client)
+    tuition = upload(
+        client,
+        "tuition.pdf",
+        path=SAMPLE.parent / "tuition_bill.pdf",
+        document_type="tuition_bill",
+    )
+    fake = FakeClient(
+        [
+            function_response("recheck_documents", {}),
+            text_response("I prepared a fresh comparison. Confirm to run it."),
+        ]
+    )
+    install_fake(client, fake, monkeypatch)
+
+    proposed = client.post("/api/ai/chat", json={"message": "Recheck my files."})
+
+    assert proposed.status_code == 200
+    pending = proposed.json()["pendingActions"][0]
+    assert pending["tool"] == "recheck_documents"
+    assert pending["args"] == {}
+
+    confirmed = client.post(f"/api/ai/actions/{pending['id']}/confirm")
+
+    assert confirmed.status_code == 200
+    report_id = confirmed.json()["reportId"]
+    report = client.get(f"/api/validations/{report_id}")
+    assert report.status_code == 200
+    assert {document["id"] for document in report.json()["documents"]} == {
+        award["id"],
+        tuition["id"],
+    }
+
+
+def test_pending_write_action_cap(client) -> None:
+    document = upload(client)
+    for _ in range(agent.MAX_PENDING_ACTIONS_PER_USER):
+        agent._make_pending_action("local-demo", "archive_document", {"id": document["id"]})
+
+    with pytest.raises(ValueError, match="Too many pending actions"):
+        agent._make_pending_action("local-demo", "archive_document", {"id": document["id"]})
+
+
+def test_confirm_cancel_action_rate_limit_is_separate(client) -> None:
+    for _ in range(agent.ACTION_RATE_LIMIT_CAPACITY):
+        with pytest.raises(agent.ActionNotFoundError):
+            agent.cancel_action("local-demo", str(uuid4()))
+
+    with pytest.raises(agent.ChatRateLimitError):
+        agent.cancel_action("local-demo", str(uuid4()))
 
 
 def test_only_one_chat_can_run_for_a_user(client, monkeypatch) -> None:

@@ -30,8 +30,11 @@ logger = logging.getLogger(__name__)
 MAX_ITERATIONS = 6
 MAX_CHAT_SECONDS = 40
 MAX_OUTPUT_TOKENS = 1024
-RATE_LIMIT_CAPACITY = 20
-RATE_LIMIT_REFILL_PER_SECOND = 1 / 30
+RATE_LIMIT_CAPACITY = 5
+RATE_LIMIT_REFILL_PER_SECOND = 1 / 120
+ACTION_RATE_LIMIT_CAPACITY = 5
+ACTION_RATE_LIMIT_REFILL_PER_SECOND = 1 / 120
+MAX_PENDING_ACTIONS_PER_USER = 3
 ACTION_TTL = timedelta(minutes=10)
 MAX_DOCUMENT_RESULTS = 50
 MAX_DEADLINE_RESULTS = 100
@@ -138,12 +141,18 @@ _TOOL_DECLARATIONS: list[dict[str, Any]] = [
         "description": "Request re-extraction of an owned PDF, retaining user-edited fields. Creates a pending action.",
         "parameters": {"type": "OBJECT", "properties": {"id": {"type": "STRING"}}, "required": ["id"]},
     },
+    {
+        "name": "recheck_documents",
+        "description": "Request a fresh persisted validation run for this user's active extracted documents. Creates a pending action and requires confirmation.",
+        "parameters": {"type": "OBJECT", "properties": {}},
+    },
 ]
 _WRITE_TOOLS = {
     "archive_document",
     "restore_document",
     "correct_document_field",
     "reextract_document",
+    "recheck_documents",
 }
 _DOCUMENT_ID_PATTERN = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
@@ -188,6 +197,7 @@ class ActionExpiredError(Exception):
 
 _state_lock = Lock()
 _buckets: dict[str, Bucket] = {}
+_action_buckets: dict[str, Bucket] = {}
 _active_chats: set[str] = set()
 _pending_actions: dict[str, PendingActionRecord] = {}
 
@@ -195,6 +205,7 @@ _pending_actions: dict[str, PendingActionRecord] = {}
 def reset_chat_state() -> None:
     with _state_lock:
         _buckets.clear()
+        _action_buckets.clear()
         _active_chats.clear()
         _pending_actions.clear()
 
@@ -221,6 +232,30 @@ def _acquire_chat(user_id: str) -> None:
 def _release_chat(user_id: str) -> None:
     with _state_lock:
         _active_chats.discard(user_id)
+
+
+def _consume_action_rate_limit(user_id: str) -> None:
+    now = time.monotonic()
+    with _state_lock:
+        bucket = _action_buckets.get(
+            user_id, Bucket(float(ACTION_RATE_LIMIT_CAPACITY), now)
+        )
+        bucket.tokens = min(
+            ACTION_RATE_LIMIT_CAPACITY,
+            bucket.tokens
+            + (now - bucket.updated_at) * ACTION_RATE_LIMIT_REFILL_PER_SECOND,
+        )
+        bucket.updated_at = now
+        if bucket.tokens < 1:
+            _action_buckets[user_id] = bucket
+            raise ChatRateLimitError(
+                max(
+                    1,
+                    int((1 - bucket.tokens) / ACTION_RATE_LIMIT_REFILL_PER_SECOND),
+                )
+            )
+        bucket.tokens -= 1
+        _action_buckets[user_id] = bucket
 
 
 def _safe_data_text(value: Any) -> Any:
@@ -356,6 +391,15 @@ def _make_pending_action(
 ) -> PendingAction:
     now = datetime.now(UTC)
     normalized_args = dict(args)
+    allowed_args = {
+        "archive_document": {"id"},
+        "restore_document": {"id"},
+        "correct_document_field": {"id", "field", "value"},
+        "reextract_document": {"id"},
+        "recheck_documents": set(),
+    }.get(tool_name)
+    if allowed_args is None or set(normalized_args) != allowed_args:
+        raise ValueError("Action arguments are invalid.")
     if tool_name == "correct_document_field":
         allowed_fields = {
             "amount",
@@ -367,17 +411,24 @@ def _make_pending_action(
         }
         if normalized_args.get("field") not in allowed_fields:
             raise ValueError("Field cannot be corrected using this action.")
-    record = _owned_document(user_id, normalized_args.get("id"))
-    if sources is not None:
-        sources[record["id"]] = _source_from_record(record)
+    if tool_name == "recheck_documents":
+        eligible = _active_extracted_records(user_id)
+        if len(eligible) < 2:
+            raise ValueError("At least two active extracted documents are required to recheck.")
+        record = None
+        summary = f"Recheck {len(eligible)} active documents"
+    else:
+        record = _owned_document(user_id, normalized_args.get("id"))
+        if sources is not None:
+            sources[record["id"]] = _source_from_record(record)
+        summary = {
+            "archive_document": f"Archive {record['filename']}",
+            "restore_document": f"Restore {record['filename']}",
+            "reextract_document": f"Re-extract {record['filename']}",
+        }.get(tool_name)
+        if tool_name == "correct_document_field":
+            summary = f"Correct {normalized_args['field']} on {record['filename']}"
     action_id = str(uuid4())
-    summary = {
-        "archive_document": f"Archive {record['filename']}",
-        "restore_document": f"Restore {record['filename']}",
-        "reextract_document": f"Re-extract {record['filename']}",
-    }.get(tool_name)
-    if tool_name == "correct_document_field":
-        summary = f"Correct {normalized_args['field']} on {record['filename']}"
     if summary is None:
         raise ValueError("Unsupported pending action.")
     pending = PendingActionRecord(
@@ -394,6 +445,12 @@ def _make_pending_action(
             if pending_action.expires_at <= now
         ]:
             _pending_actions.pop(expired_id, None)
+        outstanding = sum(
+            pending_action.user_id == user_id
+            for pending_action in _pending_actions.values()
+        )
+        if outstanding >= MAX_PENDING_ACTIONS_PER_USER:
+            raise ValueError("Too many pending actions. Confirm or cancel one first.")
         _pending_actions[action_id] = pending
     return PendingAction(id=action_id, tool=tool_name, summary=summary, args=normalized_args)
 
@@ -598,6 +655,8 @@ def _run_tool(
     if not isinstance(args, dict):
         raise TypeError("Tool arguments must be an object.")
     if name in _WRITE_TOOLS:
+        if pending:
+            raise ValueError("Only one write action can be proposed per chat request.")
         action = _make_pending_action(user_id, name, args, sources)
         pending.append(action)
         return {
@@ -809,6 +868,20 @@ async def chat(
 
 def _execute_pending(user_id: str, action: PendingActionRecord) -> dict[str, Any]:
     args = action.args
+    if action.tool == "recheck_documents":
+        documents = [
+            FinancialDocument.model_validate(record)
+            for record in _active_extracted_records(user_id)
+        ]
+        if len(documents) < 2:
+            raise ValueError("At least two active extracted documents are required to recheck.")
+        report = repositories.create_validation_run(
+            user_id,
+            documents,
+            evaluate_findings(documents),
+        )
+        return {"report_id": report.id}
+
     document_id = args["id"]
     if action.tool == "archive_document":
         record = repositories.archive_document(user_id, document_id)
@@ -862,6 +935,7 @@ def _execute_pending(user_id: str, action: PendingActionRecord) -> dict[str, Any
 
 
 def confirm_action(user_id: str, action_id: str) -> dict[str, Any]:
+    _consume_action_rate_limit(user_id)
     with _state_lock:
         action = _pending_actions.get(action_id)
         if action is None or action.user_id != user_id:
@@ -874,6 +948,7 @@ def confirm_action(user_id: str, action_id: str) -> dict[str, Any]:
 
 
 def cancel_action(user_id: str, action_id: str) -> None:
+    _consume_action_rate_limit(user_id)
     with _state_lock:
         action = _pending_actions.get(action_id)
         if action is None or action.user_id != user_id:

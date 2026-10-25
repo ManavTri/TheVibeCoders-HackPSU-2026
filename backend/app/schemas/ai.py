@@ -42,3 +42,4 @@ class ChatResponse(BaseModel):
 class ActionResult(BaseModel):
     status: Literal["confirmed", "cancelled"]
     message: str
+    report_id: str | None = Field(default=None, alias="reportId")

@@ -52,6 +52,26 @@ export function getCurrentFindings() {
   return requestJson('/findings')
 }
 
+export function sendChatMessage(message, history = []) {
+  return requestJson('/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, history }),
+  })
+}
+
+export function confirmChatAction(id) {
+  return requestJson(`/ai/actions/${encodeURIComponent(id)}/confirm`, { method: 'POST' })
+}
+
+export function cancelChatAction(id) {
+  return requestJson(`/ai/actions/${encodeURIComponent(id)}/cancel`, { method: 'POST' })
+}
+
+export function getValidation(id) {
+  return requestJson(`/validations/${encodeURIComponent(id)}`)
+}
+
 export function uploadDocument(file, documentType) {
   const body = new FormData()
   body.append('file', file)

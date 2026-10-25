@@ -3,6 +3,7 @@ import { DocumentDropzone } from './components/DocumentDropzone'
 import { SectionCard } from './components/SectionCard'
 import { Sidebar } from './components/Sidebar'
 import { StatCard } from './components/StatCard'
+import { FinancialChat } from './components/FinancialChat'
 import {
   archiveDocument,
   correctDocument,
@@ -11,6 +12,7 @@ import {
   getCurrentFindings,
   getDocumentPdf,
   getDocuments,
+  getValidation,
   permanentlyDeleteDocument,
   remoteApiWithoutAuth,
   restoreDocument,
@@ -366,6 +368,14 @@ function App() {
     }
   }
 
+  async function refreshFromChatRecheck(reportId) {
+    const nextReport = await getValidation(reportId)
+    const nextInsights = await createInsights(nextReport.id)
+    setReport(nextReport)
+    setInsights(nextInsights)
+    await reloadData()
+  }
+
   async function handleDocumentAction(action, document) {
     setBusyDocumentId(document.id)
     setError('')
@@ -528,10 +538,19 @@ function App() {
 
   function renderOtherPages() {
     if (activePage === 'AI Chat') {
-      return <SectionCard title="AI financial guidance" subtitle="Recommendations from validated documents">
-        {insights ? <><h3 className="text-xl font-semibold text-white">{insights.headline}</h3><ul className="mt-4 space-y-2">{insights.recommendations.map((item) => <li key={item} className="rounded-xl border border-slate-800 bg-[#0f141a] p-3 text-sm text-slate-200">{item}</li>)}</ul><p className="mt-4 text-xs text-slate-500">{insights.disclaimer}</p></>
-          : <p className="text-sm leading-6 text-slate-400">A conversational AI endpoint is not available yet. Run a document check to receive the supported insight summary.</p>}
-      </SectionCard>
+      return (
+        <div className="space-y-5">
+          <div>
+            <p className="text-sm uppercase tracking-[0.25em] text-[#5f6b76]">Ask about your finances</p>
+            <h2 className="mt-2 text-3xl font-semibold text-[#1b2430]">AI financial assistant</h2>
+            <p className="mt-2 text-sm text-slate-500">Get document-grounded answers, prepare corrections, or request a fresh validation.</p>
+          </div>
+          <FinancialChat
+            onDocumentsChanged={reloadData}
+            onRecheck={refreshFromChatRecheck}
+          />
+        </div>
+      )
     }
     return <SectionCard title="Account settings" subtitle="Supabase authentication and account status">
       <div className="rounded-xl border border-slate-800 bg-[#0f141a] p-4"><p className="text-xs uppercase tracking-wider text-slate-400">Signed in as</p><p className="mt-2 text-white">{session?.user?.email || 'Local development identity'}</p></div>

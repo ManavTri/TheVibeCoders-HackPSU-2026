@@ -70,6 +70,12 @@ async def chat_endpoint(
 def confirm_chat_action(action_id: UUID, user: CurrentUser) -> ActionResult:
     try:
         result = confirm_action(current_user_id(user), str(action_id))
+    except ChatRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Action request limit reached. Please wait before trying again.",
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
     except ActionNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Pending action not found.") from exc
     except ActionExpiredError as exc:
@@ -79,16 +85,25 @@ def confirm_chat_action(action_id: UUID, user: CurrentUser) -> ActionResult:
             status_code=409,
             detail="The pending action could not be completed. Review the document and try again.",
         ) from exc
-    return ActionResult(
-        status="confirmed",
-        message=f"Action completed for {result['filename']}.",
-    )
+    if result.get("report_id"):
+        return ActionResult(
+            status="confirmed",
+            message="A fresh validation report is ready.",
+            reportId=result["report_id"],
+        )
+    return ActionResult(status="confirmed", message=f"Action completed for {result['filename']}.")
 
 
 @router.post("/actions/{action_id}/cancel", response_model=ActionResult)
 def cancel_chat_action(action_id: UUID, user: CurrentUser) -> ActionResult:
     try:
         cancel_action(current_user_id(user), str(action_id))
+    except ChatRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Action request limit reached. Please wait before trying again.",
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
     except ActionNotFoundError as exc:
         raise HTTPException(status_code=404, detail="Pending action not found.") from exc
     return ActionResult(status="cancelled", message="Pending action cancelled.")

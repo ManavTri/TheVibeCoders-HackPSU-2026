@@ -75,11 +75,11 @@ All API paths are prefixed by `/api`.
 | `GET` | `/validations/{run_id}` | Load a saved validation report |
 | `POST` | `/insights` | Create a student-oriented summary from `{ "run_id": "..." }` |
 | `POST` | `/ai/chat` | Ask the authenticated user's financial planning assistant; returns reply, suggestions, sources, and pending write actions |
-| `POST` | `/ai/actions/{id}/confirm` | Explicitly confirm a pending archive, restore, correction, or re-extraction action |
+| `POST` | `/ai/actions/{id}/confirm` | Explicitly confirm a pending archive, restore, correction, re-extraction, or recheck action |
 | `POST` | `/ai/actions/{id}/cancel` | Cancel a pending AI-proposed write action |
 
 The upload UI performs a validation using only the newly uploaded, successfully extracted documents. After a student corrects a field on a report, the app calls `PATCH /documents/{id}`, starts a new validation run, and opens the refreshed report.
-The chat agent requires backend-only `LLM_API_KEY` and `LLM_MODEL` settings and does not save conversation history. Its read/write tool list, confirmation gate, and threat model are described in [`docs/agent-design.md`](docs/agent-design.md).
+The chat assistant requires backend-only `LLM_API_KEY` and `LLM_MODEL` settings and does not persist conversation history. It proposes edits, re-extraction, and validation rechecks, but every action requires explicit user confirmation. Chat requests are limited to five per user per 10 minutes; the backend also limits action confirmations and caps pending actions. See [`docs/agent-design.md`](docs/agent-design.md) for the tool allowlist and threat model.
 
 ## Project commands
 
